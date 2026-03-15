@@ -3,18 +3,21 @@
 import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { create } from 'zustand';
+import { Inter } from 'next/font/google';
 import { 
   Search, Plus, ImageIcon, Moon, Sun, X, Trash2, Trash, Loader2, 
-  Check, Pin, Sparkles, LayoutGrid, Folder, Download, 
+  Check, Pin, Sparkles, LayoutGrid, Folder, Download, RefreshCw,
   Play, ZoomIn, ZoomOut, Maximize2, Minimize2, Settings, Save, 
   RotateCcw, FastForward, FileText, Wand2, Globe, Compass, 
   ChevronRight, LogOut, Camera, UploadCloud, List as ListIcon, 
   Calendar as CalendarIcon, ChevronLeft, ChevronRight as ChevronRightIcon, Users, CheckCircle2,
   ChevronUp, ChevronDown, Edit2, Circle, Bell, Bold, Italic, Code, Heading1, ListTodo, Clock, 
-  MoreHorizontal, CheckCircle, MessageSquare, Send, AlignJustify, ShieldAlert, UserPlus, UserMinus, Columns, Smile, Square, CheckSquare, File as FileIcon, Music, Monitor, Strikethrough, Quote
+  MoreHorizontal, CheckCircle, MessageSquare, Send, AlignJustify, ShieldAlert, Monitor, Strikethrough, Quote, Smile, Square, CheckSquare, File as FileIcon, Music, Columns
 } from "lucide-react";
 import { supabase } from '@/lib/supabase'; 
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow } from 'date-fns';
+
+const inter = Inter({ subsets: ['latin'] });
 
 export interface ItemComment {
   id: string;
@@ -39,7 +42,7 @@ export interface BentoItem {
   img?: string; 
   is_pinned?: boolean;
   tags?: string[];
-  section?: string;      
+  section?: string;       
   sections?: string[];   
   list_name?: string;    
   ai_summary?: string;   
@@ -79,7 +82,7 @@ interface AppState {
     isAuthLoading: boolean; isSaving: boolean; showOnboarding: boolean; isAccountOpen: boolean;
     settingsTab: 'account' | 'team'; showTeamPresence: boolean; showNotifications: boolean;
     isChatOpen: boolean; isUploading: boolean; isDragging: boolean; isAILoading: boolean;
-    showLogoutConfirm: boolean;
+    showLogoutConfirm: boolean; isSyncing: boolean;
   };
   nav: {
     category: string; categoryType: 'all' | 'folder' | 'list' | 'type' | 'trash' | 'pinned';
@@ -98,8 +101,8 @@ interface AppState {
 }
 
 const useAppStore = create<AppState>((set) => ({
-  ui: { isAuthLoading: true, isSaving: false, showOnboarding: false, isAccountOpen: false, settingsTab: 'account', showTeamPresence: false, showNotifications: false, isChatOpen: false, isUploading: false, isDragging: false, isAILoading: false, showLogoutConfirm: false },
-  nav: { category: "All", categoryType: 'all', workspace: 'personal', viewMode: 'grid', currentDate: new Date() },
+  ui: { isAuthLoading: true, isSaving: false, showOnboarding: false, isAccountOpen: false, settingsTab: 'account', showTeamPresence: false, showNotifications: false, isChatOpen: false, isUploading: false, isDragging: false, isAILoading: false, showLogoutConfirm: false, isSyncing: false },
+  nav: { category: "All", categoryType: 'all', workspace: 'team', viewMode: 'grid', currentDate: new Date() },
   profile: { displayName: "", username: "", bio: "", error: "", isSaving: false },
   sidebar: { isCreatingFolder: false, newFolderName: "", isCreatingList: false, newListName: "" },
   media: { item: null, isScrollMode: false, zoom: 1, speed: 1 },
@@ -174,7 +177,8 @@ function useBrainboardData(
   teamWorkspaceId: string, 
   activeWorkspace: string, 
   displayName: string, 
-  showToast: (msg: string, isError?: boolean) => void
+  showToast: (msg: string, isError?: boolean) => void,
+  updateUi: Function
 ) {
   const [items, setItems] = useState<BentoItem[]>([]);
   const [customFolders, setCustomFolders] = useState<string[]>([]);
@@ -184,24 +188,31 @@ function useBrainboardData(
   const fetchItems = useCallback(async () => {
     if (!session?.user?.id) return;
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('assets')
-      .select('*')
-      .or(`user_id.eq.${session.user.id},workspace_id.eq.${teamWorkspaceId}`)
-      .order('created_at', { ascending: false });
+    updateUi({ isSyncing: true });
+    try {
+      const { data, error } = await supabase
+        .from('assets')
+        .select('*')
+        .or(`user_id.eq.${session.user.id},workspace_id.eq.${teamWorkspaceId}`)
+        .order('created_at', { ascending: false });
 
-    if (error) {
-      showToast("Failed to fetch items.", true);
-    } else if (data) {
-      setItems(data as BentoItem[]);
-      const allSections = (data as BentoItem[]).flatMap(item => item.sections || (item.section ? [item.section] : []));
-      const folders = Array.from(new Set(allSections)).filter(Boolean) as string[];
-      const lists = Array.from(new Set((data as BentoItem[]).map(i => i.list_name).filter(Boolean))) as string[];
-      setCustomFolders(folders.filter(f => !["Inbox", "Archive"].includes(f)));
-      setCustomLists(lists);
+      if (error) {
+        showToast("Failed to sync items.", true);
+      } else if (data) {
+        setItems(data as BentoItem[]);
+        const allSections = (data as BentoItem[]).flatMap(item => item.sections || (item.section ? [item.section] : []));
+        const folders = Array.from(new Set(allSections)).filter(Boolean) as string[];
+        const lists = Array.from(new Set((data as BentoItem[]).map(i => i.list_name).filter(Boolean))) as string[];
+        setCustomFolders(folders.filter(f => !["Inbox", "Archive"].includes(f)));
+        setCustomLists(lists);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+      updateUi({ isSyncing: false });
     }
-    setIsLoading(false);
-  }, [session?.user?.id, teamWorkspaceId, showToast]);
+  }, [session?.user?.id, teamWorkspaceId, showToast, updateUi]);
 
   const saveNote = async (noteToSave: BentoItem) => {
     const isTemp = String(noteToSave.id).startsWith('temp-');
@@ -224,7 +235,11 @@ function useBrainboardData(
 
     try {
         if (isTemp) {
-            const { data } = await supabase.from('assets').insert([payload]).select().single();
+            const { data, error } = await supabase.from('assets').insert([payload]).select().single();
+            if (error) {
+               showToast("Database Error: Failed to save note.", true);
+               console.error(error);
+            }
             if (data) {
                 setItems(prev => [data, ...prev.filter(i => String(i.id) !== String(noteToSave.id))]);
                 showToast("Saved successfully!");
@@ -235,7 +250,8 @@ function useBrainboardData(
                 setItems(prev => prev.map(item => String(item.id) === String(noteToSave.id) ? { ...item, ...payload } : item));
                 showToast("Updated successfully!");
             } else {
-                showToast("Failed to update item", true);
+                showToast("Database Error: Failed to update item", true);
+                console.error(error);
             }
         }
 
@@ -247,16 +263,24 @@ function useBrainboardData(
            setCustomLists(prev => [...new Set([...prev, payload.list_name as string])]);
         }
     } catch (e) {
-        showToast("Failed to save", true);
+        showToast("Network Error: Failed to save.", true);
         console.error(e);
     }
   };
 
   const insertItem = async (payload: any) => {
-    const { data, error } = await supabase.from('assets').insert([payload]).select().single();
-    if (error) showToast("Failed to insert item.", true);
-    if (data) setItems(prev => [data, ...prev]);
-    return data;
+    try {
+      const { data, error } = await supabase.from('assets').insert([payload]).select().single();
+      if (error) {
+         showToast(`Database Error: ${error.message}`, true);
+         console.error(error);
+      }
+      if (data) setItems(prev => [data, ...prev]);
+      return data;
+    } catch (e) {
+      showToast("Network Error: Failed to insert.", true);
+      console.error(e);
+    }
   };
 
   const toggleItemReaction = async (item: BentoItem, emoji: string, userId: string) => {
@@ -277,10 +301,8 @@ function useBrainboardData(
 
      const reactionsString = Object.keys(reactions).length > 0 ? JSON.stringify(reactions) : null;
      
-     // Optimistic local update
      setItems(prev => prev.map(i => i.id === item.id ? { ...i, likes: reactionsString as any } : i));
      
-     // DB update
      if (!String(item.id).startsWith('temp-')) {
         try {
            await supabase.from('assets').update({ likes: reactionsString }).eq('id', item.id);
@@ -389,25 +411,42 @@ function useTeamSpace(
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [teamRole, setTeamRole] = useState<string>('none'); 
+  const [teamRole, setTeamRole] = useState<string>('editor'); 
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+
+  const isChatOpenRef = useRef(isChatOpen);
+  const navWorkspaceRef = useRef(navWorkspace);
+  const onlineUsersRef = useRef<string[]>([]);
+
+  useEffect(() => { isChatOpenRef.current = isChatOpen; }, [isChatOpen]);
+  useEffect(() => { navWorkspaceRef.current = navWorkspace; }, [navWorkspace]);
+  useEffect(() => { onlineUsersRef.current = onlineUsers; }, [onlineUsers]);
 
   const fetchProfilesAndRole = useCallback(async (currentUser: any) => {
     try {
       const { data: workspaceData } = await supabase.from('workspace_members').select('*').eq('workspace_id', teamWorkspaceId);
       const { data: profilesData } = await supabase.from('profiles').select('*');
       
+      const isMeHarshit = currentUser?.email === 'harshiitt33@gmail.com';
+
+      if (currentUser && !workspaceData?.find(w => w.user_id === currentUser.id) && !isMeHarshit) {
+          await supabase.from('workspace_members').upsert({
+              workspace_id: teamWorkspaceId,
+              user_id: currentUser.id,
+              role: 'editor'
+          }, { onConflict: 'workspace_id, user_id' });
+      }
+
       if (profilesData) {
           const profileMap = new Map();
-          const isMeHarshit = currentUser?.email === 'harshiitt33@gmail.com';
 
           profilesData.forEach(p => {
               const memberInfo = workspaceData?.find(w => w.user_id === p.id);
-              let r = memberInfo ? memberInfo.role : 'none';
+              let r = memberInfo ? memberInfo.role : 'editor'; 
               
               const isThisUserHarshit = p.id === currentUser?.id && isMeHarshit; 
               const looksLikeHarshit = p.username?.includes('harshiitt33') || p.display_name?.toLowerCase().includes('harshit') || isThisUserHarshit;
               
-              // Force Harshiitt33 to be the ONLY admin in the UI. 
               if (r === 'admin' && !looksLikeHarshit) r = 'editor';
               if (isThisUserHarshit) r = 'admin';
 
@@ -417,10 +456,10 @@ function useTeamSpace(
                 username: p.username || '',
                 bio: p.bio || '',
                 avatar: p.avatar_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${p.id}`,
-                status: p.id === currentUser?.id ? 'online' : 'offline', 
+                status: (p.id === currentUser?.id || onlineUsersRef.current.includes(p.id)) ? 'online' : 'offline', 
                 lastSeen: new Date(p.updated_at || Date.now()),
                 role: r,
-                inWorkspace: !!memberInfo
+                inWorkspace: !!memberInfo || p.id === currentUser?.id
               });
           });
           
@@ -433,8 +472,8 @@ function useTeamSpace(
                   avatar: currentUser.user_metadata?.avatar_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${currentUser.email}`,
                   status: 'online', 
                   lastSeen: new Date(),
-                  role: isMeHarshit ? 'admin' : (myMemberInfo ? myMemberInfo.role : 'none'),
-                  inWorkspace: !!myMemberInfo
+                  role: isMeHarshit ? 'admin' : (myMemberInfo ? myMemberInfo.role : 'editor'),
+                  inWorkspace: true
               });
           }
           
@@ -465,7 +504,49 @@ function useTeamSpace(
     };
     fetchChat();
 
-    const assetChannel = supabase.channel('realtime_assets')
+    // 1. SUPABASE PRESENCE
+    const presenceChannel = supabase.channel('team_presence', {
+        config: { presence: { key: session.user.id } }
+    });
+
+    presenceChannel.on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const activeIds = Object.keys(state);
+        setOnlineUsers(activeIds);
+        
+        setTeamMembers(prev => prev.map(m => ({
+            ...m,
+            status: activeIds.includes(m.id) ? 'online' : 'offline'
+        })));
+    })
+    .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        console.log('User joined:', key);
+    })
+    .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+        console.log('User left:', key);
+    })
+    .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+            await presenceChannel.track({ online_at: new Date().toISOString() });
+        }
+    });
+
+    // 2. WATCH FOR NEW USERS IN DATABASE
+    const profilesWatcher = supabase.channel('profiles_watcher')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+            fetchProfilesAndRole(session.user);
+        }).subscribe();
+
+    const workspaceWatcher = supabase.channel('workspace_watcher')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_members', filter: `workspace_id=eq.${teamWorkspaceId}` }, () => {
+            fetchProfilesAndRole(session.user);
+        }).subscribe();
+
+    // 3. ASSETS & CHAT LIVE SYNC
+    const uniqueAssetChannel = `realtime_assets_${Math.random().toString(36).substring(7)}`;
+    const uniqueChatChannel = `realtime_messages_${Math.random().toString(36).substring(7)}`;
+
+    const assetChannel = supabase.channel(uniqueAssetChannel)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'assets', filter: `workspace_id=eq.${teamWorkspaceId}` }, (payload) => {
          if (payload.eventType === 'INSERT') {
              if (payload.new.user_id !== session.user.id) {
@@ -474,7 +555,7 @@ function useTeamSpace(
                 setNotifications(prev => [{ id: payload.new.id, text: `${creatorName} added a new ${itemType}.`, time: new Date(payload.new.created_at || new Date()), read: false }, ...prev]);
                 setItems(prev => [payload.new as BentoItem, ...prev]);
                 
-                if (navWorkspace === 'personal') showToast(`🏢 Team: ${creatorName} shared a new ${itemType}!`);
+                if (navWorkspaceRef.current === 'personal') showToast(`🏢 Team: ${creatorName} shared a new ${itemType}!`);
                 else showToast(`${creatorName} shared a new ${itemType}!`);
              }
          } else if (payload.eventType === 'UPDATE') {
@@ -484,20 +565,26 @@ function useTeamSpace(
          }
       }).subscribe();
 
-    const chatChannel = supabase.channel('realtime_messages')
+    const chatChannel = supabase.channel(uniqueChatChannel)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_messages', filter: `workspace_id=eq.${teamWorkspaceId}` }, (payload) => {
          setChatMessages(prev => [...prev, payload.new as ChatMessage]);
          setTimeout(() => { if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight; }, 100);
-         if (payload.new.user_id !== session.user.id && !isChatOpen) {
+         if (payload.new.user_id !== session.user.id && !isChatOpenRef.current) {
             setNotifications(prev => [{ id: `msg-${payload.new.id}`, text: `New message from ${cleanName(payload.new.creator_name)}`, time: new Date(payload.new.created_at || new Date()), read: false }, ...prev]);
             
-            if (navWorkspace === 'personal') showToast(`💬 Team Chat: New message from ${cleanName(payload.new.creator_name)}`);
+            if (navWorkspaceRef.current === 'personal') showToast(`💬 Team Chat: New message from ${cleanName(payload.new.creator_name)}`);
             else showToast(`New message from ${cleanName(payload.new.creator_name)}`);
          }
       }).subscribe();
 
-    return () => { supabase.removeChannel(assetChannel); supabase.removeChannel(chatChannel); }
-  }, [session, teamWorkspaceId, isChatOpen, navWorkspace, setItems, showToast, chatScrollRef]);
+    return () => { 
+        supabase.removeChannel(presenceChannel);
+        supabase.removeChannel(profilesWatcher);
+        supabase.removeChannel(workspaceWatcher);
+        supabase.removeChannel(assetChannel); 
+        supabase.removeChannel(chatChannel); 
+    }
+  }, [session?.user?.id, teamWorkspaceId, setItems, showToast, chatScrollRef, fetchProfilesAndRole]);
 
   const handleUpdateMemberRole = async (targetUserId: string, newRole: string) => {
      try {
@@ -564,6 +651,7 @@ export default function BrainboardBalanced() {
 
   // --- REFS ---
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
@@ -574,7 +662,7 @@ export default function BrainboardBalanced() {
     isLoading, fetchItems, saveNote, insertItem, updateStickyNote, toggleItemReaction, toggleChecklistItem,
     moveToTrash, restoreFromTrash, hardDelete, emptyTrash,
     renameFolder, deleteFolder, renameList, deleteList
-  } = useBrainboardData(session, teamWorkspaceId, nav.workspace, profile.displayName, showToast);
+  } = useBrainboardData(session, teamWorkspaceId, nav.workspace, profile.displayName, showToast, updateUi);
 
   const {
     teamMembers, notifications, chatMessages, teamRole,
@@ -690,7 +778,7 @@ export default function BrainboardBalanced() {
      if (session?.user?.id && !ui.showOnboarding) {
          fetchItems(); 
      }
-  }, [session, ui.showOnboarding, fetchItems]);
+  }, [session?.user?.id, ui.showOnboarding, fetchItems]);
 
   const handleNewNote = () => {
     if (!session?.user?.id) return;
@@ -761,9 +849,15 @@ export default function BrainboardBalanced() {
         await supabase.from('profiles').upsert({ 
            id: session.user.id, display_name: profile.displayName, username: cleanUsername, bio: profile.bio, updated_at: new Date().toISOString() 
         }); 
+        
+        if (ui.showOnboarding) {
+            await supabase.from('workspace_members').upsert({ 
+                workspace_id: teamWorkspaceId, user_id: session.user.id, role: 'editor' 
+            }, { onConflict: 'workspace_id, user_id' });
+        }
+
         showToast(ui.showOnboarding ? "Welcome to Brainboard!" : "Profile updated successfully!"); 
         updateUi({ showOnboarding: false });
-        fetchItems(); 
     } catch(e) {
         showToast("Failed to sync profile.", true); 
         console.error(e);
@@ -771,6 +865,25 @@ export default function BrainboardBalanced() {
     
     updateProfile({ isSaving: false });
     fetchProfilesAndRole(session.user);
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !session?.user?.id) return;
+    updateUi({ isUploading: true });
+    const fileName = `avatar-${session.user.id}-${Date.now()}.${file.name.split('.').pop()}`;
+    try {
+       await supabase.storage.from('media').upload(fileName, file);
+       const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
+       await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
+       await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', session.user.id);
+       setSession({ ...session, user: { ...session.user, user_metadata: { ...session.user.user_metadata, avatar_url: publicUrl } } });
+       fetchProfilesAndRole(session.user);
+       showToast("Profile picture updated!");
+    } catch (err) {
+       showToast("Failed to upload avatar", true);
+    }
+    updateUi({ isUploading: false });
   };
 
   const handleGoogleLogin = async () => {
@@ -826,6 +939,7 @@ export default function BrainboardBalanced() {
   };
 
   const canModifyStructure = nav.workspace === 'personal' || teamRole === 'admin' || teamRole === 'editor';
+  const canCreate = nav.workspace === 'personal' || teamRole === 'admin' || teamRole === 'editor';
 
   const handleRenameFolder = (oldName: string, newName: string) => {
     if (!canModifyStructure) return showToast("Permission denied.", true);
@@ -878,8 +992,11 @@ export default function BrainboardBalanced() {
         const fileName = `${Math.random()}.${file.name.split('.').pop()}`;
         
         try {
-            await supabase.storage.from('media').upload(fileName, file);
+            const { error: storageError } = await supabase.storage.from('media').upload(fileName, file);
+            if (storageError) throw storageError;
+
             const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
+            
             await insertItem({
               user_id: session.user.id, workspace_id: nav.workspace === 'team' ? teamWorkspaceId : null,
               creator: activeStateRef.current.userName, type: type, 
@@ -1029,6 +1146,12 @@ export default function BrainboardBalanced() {
 
   return (
     <>
+      {/* GLOBAL FONT INJECTION */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.cdnfonts.com/css/gt-walsheim');
+        .gt-walsheim { font-family: 'GT Walsheim', sans-serif; font-weight: 400; }
+      `}} />
+
       {/* MOBILE STRICT BLOCKER */}
       <div className="flex md:hidden fixed inset-0 z-[99999] bg-[#000000] text-white flex-col items-center justify-center p-8 text-center selection:bg-teal-500/30">
          <Monitor size={80} className="mb-8 text-teal-400 opacity-90" strokeWidth={1} />
@@ -1064,7 +1187,7 @@ export default function BrainboardBalanced() {
         </AnimatePresence>
 
         {!session ? (
-          <div className={`relative h-screen w-full bg-[#000000] text-white overflow-hidden font-sans selection:bg-teal-500/30 flex flex-col items-center justify-center`}>
+          <div className={`relative h-screen w-full bg-[#000000] text-white overflow-hidden gt-walsheim selection:bg-teal-500/30 flex flex-col items-center justify-center`}>
             {/* Ambient Rotating Background Gradients */}
             <div className="absolute inset-0 pointer-events-none z-0 flex items-center justify-center overflow-hidden">
                <motion.div animate={{ rotate: 360, scale: [1, 1.1, 1] }} transition={{ duration: 30, repeat: Infinity, ease: "linear" }} className="absolute w-[60vw] h-[60vw] bg-gradient-to-tr from-teal-600/30 to-emerald-900/10 blur-[140px] rounded-full" />
@@ -1116,8 +1239,9 @@ export default function BrainboardBalanced() {
             </main>
           </div>
         ) : (
-          <div className={`flex h-screen w-full transition-colors duration-700 overflow-hidden ${theme.bg} ${theme.text} font-sans selection:bg-teal-500/30`}>
+          <div className={`flex h-screen w-full transition-colors duration-700 overflow-hidden ${theme.bg} ${theme.text} gt-walsheim selection:bg-teal-500/30`}>
             <input type="file" ref={fileInputRef} onChange={handleMediaUpload} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.txt" multiple className="hidden" />
+            <input type="file" ref={avatarInputRef} onChange={handleAvatarUpload} accept="image/*" className="hidden" />
 
             {/* --- MODALS --- */}
             <OnboardingModal ui={ui} profile={profile} updateProfile={updateProfile} handleUpdateProfile={handleUpdateProfile} theme={theme} isDark={isDark} />
@@ -1125,7 +1249,7 @@ export default function BrainboardBalanced() {
             
             <SettingsModal 
               ui={ui} updateUi={updateUi} profile={profile} updateProfile={updateProfile} handleUpdateProfile={handleUpdateProfile}
-              currentAvatar={currentAvatar} userDisplayName={userDisplayName} userHandle={userHandle}
+              currentAvatar={currentAvatar} userDisplayName={userDisplayName} userHandle={userHandle} avatarInputRef={avatarInputRef}
               teamRole={teamRole} teamMembers={teamMembers} session={session} handleUpdateMemberRole={handleUpdateMemberRole} theme={theme} isDark={isDark}
             />
             
@@ -1160,13 +1284,13 @@ export default function BrainboardBalanced() {
                        transition={modalSpring}
                      />
                      <button 
-                       onClick={() => { updateNav({ workspace: 'personal', viewMode: 'grid' }); updateUi({ isChatOpen: false }); }} 
+                       onClick={() => { updateNav({ workspace: 'personal', viewMode: 'grid' }); updateUi({ isChatOpen: false }); fetchItems(); }} 
                        className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-colors ${nav.workspace === 'personal' ? 'text-teal-600 dark:text-teal-400' : theme.textMuted}`}
                      >
                        Personal
                      </button>
                      <button 
-                       onClick={() => updateNav({ workspace: 'team', viewMode: 'grid' })} 
+                       onClick={() => { updateNav({ workspace: 'team', viewMode: 'grid' }); fetchItems(); }} 
                        className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl transition-colors ${nav.workspace === 'team' ? 'text-teal-600 dark:text-teal-400' : theme.textMuted}`}
                      >
                        Team
@@ -1307,6 +1431,10 @@ export default function BrainboardBalanced() {
                 </div>
                 
                 <div className="flex items-center gap-4 shrink-0">
+                  <motion.button whileHover={bounceHover} whileTap={bounceTap} onClick={() => fetchItems()} className={`p-3 rounded-full transition-all border shadow-sm ${isDark ? 'bg-white/5 border-white/5 text-teal-400' : 'bg-white border-zinc-200 text-teal-600'}`} title="Manual Sync">
+                     <RefreshCw size={18} strokeWidth={2} className={ui.isSyncing ? "animate-spin" : ""} />
+                  </motion.button>
+
                   <ThemeToggle isDark={isDark} toggle={toggleTheme} />
 
                   <AnimatePresence>
@@ -1417,7 +1545,7 @@ export default function BrainboardBalanced() {
                       </motion.button>
                     ) : (
                       <motion.div key="btn-all" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex gap-2">
-                        {teamRole !== 'viewer' && teamRole !== 'none' && (
+                        {canCreate && (
                            <>
                               <motion.button whileHover={bounceHover} whileTap={bounceTap} onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`px-5 py-3 rounded-full text-sm font-bold transition-all flex items-center justify-center border ${theme.card} hover:opacity-80 active:scale-95`} title="Upload File, Image, Video, Audio">
                                  {ui.isUploading ? <Loader2 size={18} strokeWidth={2} className="animate-spin" /> : <ImageIcon size={18} strokeWidth={1.5} />}
@@ -1464,7 +1592,7 @@ export default function BrainboardBalanced() {
               <div className="flex-1 overflow-y-auto px-10 pb-20 custom-scrollbar relative">
                 {isLoading ? (
                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6">
-                     {[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className={`h-40 rounded-[2.5rem] break-inside-avoid animate-pulse border ${theme.card}`} />)}
+                      {[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className={`h-40 rounded-[2.5rem] break-inside-avoid animate-pulse border ${theme.card}`} />)}
                    </div>
                 ) : filteredData.length === 0 && (nav.viewMode === 'grid' || nav.viewMode === 'card') ? (
                    <div className="h-full w-full flex flex-col items-center justify-center text-center pb-20 opacity-50">
@@ -1711,7 +1839,7 @@ function OnboardingModal({ ui, profile, updateProfile, handleUpdateProfile, them
   );
 }
 
-function SettingsModal({ ui, updateUi, profile, updateProfile, handleUpdateProfile, currentAvatar, userDisplayName, userHandle, teamRole, teamMembers, session, handleUpdateMemberRole, theme, isDark }: any) {
+function SettingsModal({ ui, updateUi, profile, updateProfile, handleUpdateProfile, currentAvatar, userDisplayName, userHandle, avatarInputRef, teamRole, teamMembers, session, handleUpdateMemberRole, theme, isDark }: any) {
   return (
     <AnimatePresence>
       {ui.isAccountOpen && (
@@ -1721,7 +1849,7 @@ function SettingsModal({ ui, updateUi, profile, updateProfile, handleUpdateProfi
             
             <div className={`w-full md:w-1/3 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r ${isDark ? 'border-white/5 bg-white/[0.02]' : 'border-zinc-200 bg-zinc-50/[0.5]'}`}>
                <div className="p-12 flex flex-col items-center justify-center w-full">
-                   <motion.div whileHover={{ scale: 1.05 }} className="relative group cursor-pointer mb-8" onClick={() => alert("Avatar upload placeholder")}>
+                   <motion.div whileHover={{ scale: 1.05 }} className="relative group cursor-pointer mb-8" onClick={() => avatarInputRef.current?.click()}>
                       <img src={currentAvatar} className={`w-32 h-32 rounded-[2.5rem] object-cover shadow-2xl ring-4 ${isDark ? 'ring-white/10' : 'ring-black/5'}`} alt="Avatar" />
                       <div className="absolute inset-0 bg-black/60 rounded-[2.5rem] opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity backdrop-blur-sm">
                          {ui.isUploading ? <Loader2 size={32} strokeWidth={1.5} className="animate-spin text-white" /> : <Camera size={32} strokeWidth={1.5} className="text-white" />}
@@ -1792,7 +1920,6 @@ function SettingsModal({ ui, updateUi, profile, updateProfile, handleUpdateProfi
                                          className={`text-xs font-black uppercase tracking-widest px-4 py-3 rounded-full outline-none appearance-none transition-all ${member.role === 'admin' || member.id === session?.user?.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-black'}`}
                                       >
                                          <option value="none">Not in Team</option>
-                                         {/* Only Harshit has Admin capabilities. Hidden from others. */}
                                          {member.role === 'admin' && <option value="admin">Admin</option>}
                                          <option value="editor">Editor</option>
                                          <option value="viewer">Viewer</option>
@@ -2236,23 +2363,31 @@ function TeamChatDrawer({
 
        <div className={`p-6 border-t relative ${isDark ? 'border-white/10' : 'border-black/5'}`}>
           <AnimatePresence>
-            {mentionQuery.active && mentionQuery.target === 'chat' && (
-               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`absolute z-50 bottom-full left-6 mb-3 w-[calc(100%-3rem)] rounded-[2rem] shadow-2xl border p-3 backdrop-blur-xl ${isDark ? 'bg-zinc-800/95 border-zinc-700' : 'bg-white/95 border-zinc-200'}`}>
-                  <p className={`text-[10px] font-bold uppercase tracking-widest px-4 py-2 mb-1 ${theme.textMuted}`}>Mention Team Member</p>
-                  {teamMembers.filter((m: any) => m.name.toLowerCase().includes(mentionQuery.query.toLowerCase())).map((member: any) => (
-                     <button key={member.id} onClick={() => insertMention(cleanName(member.name))} className={`w-full flex items-center gap-4 px-4 py-3 rounded-full transition-colors ${isDark ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-black'}`}>
-                        <img src={member.avatar} loading="lazy" className="w-8 h-8 rounded-full object-cover" />
-                        <span className="text-sm font-bold">{cleanName(member.name)}</span>
-                     </button>
-                  ))}
-               </motion.div>
-            )}
+             {mentionQuery.active && mentionQuery.target === 'chat' && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`absolute z-50 bottom-full left-6 mb-3 w-[calc(100%-3rem)] rounded-[2rem] shadow-2xl border p-3 backdrop-blur-xl ${isDark ? 'bg-zinc-800/95 border-zinc-700' : 'bg-white/95 border-zinc-200'}`}>
+                   <p className={`text-[10px] font-bold uppercase tracking-widest px-4 py-2 mb-1 ${theme.textMuted}`}>Mention Team Member</p>
+                   {teamMembers.filter((m: any) => m.name.toLowerCase().includes(mentionQuery.query.toLowerCase())).map((member: any) => (
+                      <button key={member.id} onClick={() => insertMention(cleanName(member.name))} className={`w-full flex items-center gap-4 px-4 py-3 rounded-full transition-colors ${isDark ? 'hover:bg-white/10 text-white' : 'hover:bg-black/5 text-black'}`}>
+                         <img src={member.avatar} loading="lazy" className="w-8 h-8 rounded-full object-cover" />
+                         <span className="text-sm font-bold">{cleanName(member.name)}</span>
+                      </button>
+                   ))}
+                </motion.div>
+             )}
           </AnimatePresence>
 
           <div className="relative flex items-end">
              <textarea 
                 ref={chatInputRef} value={chatInput} onChange={handleTextareaChange}
-                onKeyDown={e => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendChatMessage(); } }}
+                onKeyDown={e => { 
+                   if(mentionQuery.active && e.key === 'Enter') {
+                       e.preventDefault();
+                       const matched = teamMembers.filter((m: any) => m.name.toLowerCase().includes(mentionQuery.query.toLowerCase()));
+                       if(matched.length > 0) insertMention(cleanName(matched[0].name));
+                       return;
+                   }
+                   if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendChatMessage(); } 
+                }}
                 placeholder="Type a message... use @ to mention."
                 className={`w-full resize-none min-h-[60px] max-h-32 rounded-[2rem] pl-5 pr-14 py-4 text-sm font-medium outline-none transition-all custom-scrollbar shadow-sm border ${isDark ? 'bg-white/5 border-white/10 text-white focus:bg-white/10' : 'bg-white border-zinc-200 text-black focus:border-teal-500'}`}
              />
