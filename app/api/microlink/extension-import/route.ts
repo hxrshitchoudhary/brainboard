@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Using the Service Role Key to bypass RLS security blocks
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; 
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -18,6 +13,17 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
+    // 👉 THIS MUST BE INSIDE THE POST FUNCTION!
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY; 
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("Missing Supabase Environment Variables!");
+      return NextResponse.json({ error: 'Server Config Error' }, { status: 500, headers: corsHeaders });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
     const body = await req.json();
     const { urls } = body;
 
@@ -31,8 +37,8 @@ export async function POST(req: Request) {
       title: 'Imported Instagram Reel',
       sections: ['Inbox', 'Instagram'],
       creator: 'Extension Importer',
-      // 👉 IMPORTANT: Put your exact Supabase User ID here!
-      user_id: 'e7acff70-e1d7-4183-88a1-dbc2e9d2aedb', 
+      // 👉 REPLACE WITH YOUR ACTUAL SUPABASE USER ID
+      user_id: 'PASTE_YOUR_ACTUAL_USER_ID_HERE', 
       created_at: new Date().toISOString()
     }));
 
