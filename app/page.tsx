@@ -1,5 +1,3 @@
-// PRE-REQUISITE: Run `npm install sonner cmdk` before running this file.
-
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, memo, useRef } from "react";
@@ -768,7 +766,7 @@ function useTeamSpace(
   };
 
   return {
-    teamMembers, notifications, chatMessages, teamRole,
+    teamMembers, notifications, chatMessages, setChatMessages, teamRole,
     fetchProfilesAndRole, handleUpdateMemberRole, handleMarkAsRead, handleMarkAllAsRead
   };
 }
@@ -830,7 +828,7 @@ export default function BrainboardBalanced() {
   } = useBrainboardData(session, teamWorkspaceId, nav.workspace, profile.displayName, showToast, updateUi);
 
   const {
-    teamMembers, notifications, chatMessages, teamRole,
+    teamMembers, notifications, chatMessages, setChatMessages, teamRole,
     fetchProfilesAndRole, handleUpdateMemberRole, handleMarkAsRead, handleMarkAllAsRead
   } = useTeamSpace(session, teamWorkspaceId, ui.isChatOpen, nav.workspace, showToast, setItems, updateUi, chatScrollRef);
 
@@ -1089,6 +1087,14 @@ export default function BrainboardBalanced() {
         console.error(e);
         showToast("Failed to send message", true);
     }
+  };
+
+  const handleClearChat = async () => {
+    if (teamRole !== 'admin') return;
+    if (!window.confirm("Are you sure you want to completely clear the team chat?")) return;
+    setChatMessages([]);
+    await supabase.from('team_messages').delete().eq('workspace_id', teamWorkspaceId);
+    showToast("Team chat cleared.");
   };
 
   const canModifyStructure = nav.workspace === 'personal' || teamRole === 'admin' || teamRole === 'editor';
@@ -2007,6 +2013,8 @@ export default function BrainboardBalanced() {
                 handleTextareaChange={handleChatTextareaChange}
                 handleSendChatMessage={handleSendChatMessage}
                 chatInputRef={chatInputRef}
+                teamRole={teamRole}
+                clearChat={handleClearChat}
               />
 
             </div>
@@ -2026,7 +2034,7 @@ function VirtualViewport({ children, minHeight }: { children: React.ReactNode, m
   );
 }
 
-const RobustTextareaEditor = React.forwardRef(({ value, onChange, placeholder, className, isDark, theme, onKeyDown }: any, ref: any) => {
+const RobustTextareaEditor = React.forwardRef(({ value, onChange, placeholder, className, isDark, theme, onKeyDown, readOnly }: any, ref: any) => {
    const [lineCount, setLineCount] = useState(1);
    
    useEffect(() => {
@@ -2071,7 +2079,8 @@ const RobustTextareaEditor = React.forwardRef(({ value, onChange, placeholder, c
             value={value} 
             onChange={onChange} 
             onKeyDown={handleInternalKeyDown}
-            className={`${className} p-4 flex-1 w-full bg-transparent border-none outline-none resize-none placeholder:opacity-30 custom-scrollbar ${theme.text}`} 
+            readOnly={readOnly}
+            className={`${className} p-4 flex-1 w-full bg-transparent border-none outline-none resize-none placeholder:opacity-30 custom-scrollbar ${theme.text} ${readOnly ? 'cursor-default' : ''}`} 
             spellCheck={false}
          />
       </div>
@@ -2224,10 +2233,10 @@ function SettingsModal({ ui, updateUi, profile, updateProfile, handleUpdateProfi
                                    
                                    <div className="flex items-center gap-3 shrink-0 ml-4">
                                       <select 
-                                         disabled={member.role === 'admin' || member.id === session?.user?.id}
+                                         disabled={teamRole !== 'admin' || member.role === 'admin' || member.id === session?.user?.id}
                                          value={member.inWorkspace ? (member.role || 'viewer') : 'none'} 
                                          onChange={(e) => handleUpdateMemberRole(member.id, e.target.value)}
-                                         className={`text-xs font-black uppercase tracking-widest px-4 py-3 rounded-full outline-none appearance-none transition-all ${member.role === 'admin' || member.id === session?.user?.id ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-black'}`}
+                                         className={`text-xs font-black uppercase tracking-widest px-4 py-3 rounded-full outline-none appearance-none transition-all ${(teamRole !== 'admin' || member.role === 'admin' || member.id === session?.user?.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-black'}`}
                                       >
                                          <option value="none">Not in Team</option>
                                          {member.role === 'admin' && <option value="admin">Admin</option>}
@@ -2324,7 +2333,7 @@ function MediaViewerModal({ media, updateMedia, closeMediaViewer, session, teamR
              onClick={(e) => e.stopPropagation()}
            >
              {currentItem.type === 'video' ? (
-               <video ref={videoPlayerRef} src={currentItem.url || currentItem.thumbnail_url} controls autoPlay playsInline className="max-w-full max-h-[85vh] rounded-2xl shadow-[0_0_100px_rgba(0,0,0,0.8)] border border-white/10 object-contain bg-black" />
+               <video ref={videoPlayerRef} src={currentItem.url || currentItem.thumbnail_url} controls autoPlay playsInline className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain bg-black" />
              ) : (
                <motion.img 
                  drag={media.zoom > 1 && !media.isScrollMode} 
@@ -2333,7 +2342,7 @@ function MediaViewerModal({ media, updateMedia, closeMediaViewer, session, teamR
                  animate={{ scale: media.zoom }} 
                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
                  src={currentItem.thumbnail_url || currentItem.img} alt={currentItem.title || "Media"} 
-                 className={`rounded-2xl shadow-[0_0_120px_rgba(0,0,0,0.8)] border border-white/10 ${media.isScrollMode ? 'w-full h-auto object-cover' : 'max-w-full max-h-[85vh] object-contain'} ${media.zoom > 1 && !media.isScrollMode ? 'cursor-grab active:cursor-grabbing' : ''}`} 
+                 className={`rounded-2xl shadow-2xl ${media.isScrollMode ? 'w-full h-auto object-cover' : 'max-w-full max-h-[85vh] object-contain'} ${media.zoom > 1 && !media.isScrollMode ? 'cursor-grab active:cursor-grabbing' : ''}`} 
                />
              )}
            </motion.div>
@@ -2355,6 +2364,8 @@ function NoteEditorModal({ editingNote, updateLocalNoteState, handleCloseAndSave
      return editingNote;
   }, [items, editingNote]);
 
+  const canModify = nav.workspace === 'personal' || teamRole === 'admin' || teamRole === 'editor' || editingNote?.user_id === session?.user?.id;
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
@@ -2366,7 +2377,7 @@ function NoteEditorModal({ editingNote, updateLocalNoteState, handleCloseAndSave
   }, [isOptionsMenuOpen]);
 
   const applyFormatting = (prefix: string, suffix: string = prefix) => {
-    if (!textareaRef.current || !editingNote) return;
+    if (!textareaRef.current || !editingNote || !canModify) return;
     const start = textareaRef.current.selectionStart;
     const end = textareaRef.current.selectionEnd;
     const text = editingNote.content || "";
@@ -2384,6 +2395,7 @@ function NoteEditorModal({ editingNote, updateLocalNoteState, handleCloseAndSave
   };
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (!canModify) return;
     const val = e.target.value;
     updateLocalNoteState(editingNote!.id, "content", val);
     const cursor = e.target.selectionStart;
@@ -2397,6 +2409,7 @@ function NoteEditorModal({ editingNote, updateLocalNoteState, handleCloseAndSave
   };
 
   const insertNoteMention = (name: string) => {
+    if (!canModify) return;
     const currentText = editingNote?.content || "";
     if (!textareaRef.current) return;
     const cursor = textareaRef.current.selectionStart;
@@ -2433,67 +2446,79 @@ function NoteEditorModal({ editingNote, updateLocalNoteState, handleCloseAndSave
               </button>
               
               <div className="flex items-center gap-3">
-                <div className="relative" ref={optionsMenuRef}>
-                  <button aria-label="Note Options" onClick={() => setIsOptionsMenuOpen(!isOptionsMenuOpen)} className={`p-3 rounded-full transition-all border shadow-sm active:scale-95 ${theme.card} hover:opacity-80`}>
-                    <MoreHorizontal size={20} strokeWidth={2} />
-                  </button>
-                  <AnimatePresence>
-                    {isOptionsMenuOpen && (
-                      <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className={`absolute right-0 top-full mt-3 w-64 z-50 p-4 rounded-2xl shadow-2xl border backdrop-blur-2xl ${isDark ? 'bg-zinc-800/95 border-zinc-700' : 'bg-white/95 border-stone-200'}`}>
-                         <h4 className={`text-[10px] font-bold uppercase tracking-widest mb-3 px-2 ${theme.textMuted}`}>Note Options</h4>
-                         <div className="space-y-3">
-                           <div className="flex flex-col gap-1">
-                             <label className={`text-[10px] font-bold px-2 ${theme.textMuted}`}>Folder</label>
-                             <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-black/5 border-transparent'}`}>
-                               <Folder size={14} className="text-teal-500" />
-                               <input type="text" value={editingNote.section || editingNote.sections?.[0] || ""} onChange={(e) => updateLocalNoteState(editingNote.id, "section", e.target.value)} placeholder="Folder name..." className={`bg-transparent border-none outline-none w-full text-sm font-medium ${theme.text}`} />
+                {canModify && (
+                  <div className="relative" ref={optionsMenuRef}>
+                    <button aria-label="Note Options" onClick={() => setIsOptionsMenuOpen(!isOptionsMenuOpen)} className={`p-3 rounded-full transition-all border shadow-sm active:scale-95 ${theme.card} hover:opacity-80`}>
+                      <MoreHorizontal size={20} strokeWidth={2} />
+                    </button>
+                    <AnimatePresence>
+                      {isOptionsMenuOpen && (
+                        <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} className={`absolute right-0 top-full mt-3 w-64 z-50 p-4 rounded-2xl shadow-2xl border backdrop-blur-2xl ${isDark ? 'bg-zinc-800/95 border-zinc-700' : 'bg-white/95 border-stone-200'}`}>
+                           <h4 className={`text-[10px] font-bold uppercase tracking-widest mb-3 px-2 ${theme.textMuted}`}>Note Options</h4>
+                           <div className="space-y-3">
+                             <div className="flex flex-col gap-1">
+                               <label className={`text-[10px] font-bold px-2 ${theme.textMuted}`}>Folder</label>
+                               <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-black/5 border-transparent'}`}>
+                                 <Folder size={14} className="text-teal-500" />
+                                 <input type="text" value={editingNote.section || editingNote.sections?.[0] || ""} onChange={(e) => updateLocalNoteState(editingNote.id, "section", e.target.value)} placeholder="Folder name..." className={`bg-transparent border-none outline-none w-full text-sm font-medium ${theme.text}`} />
+                               </div>
                              </div>
-                           </div>
-                           <div className="flex flex-col gap-1">
-                             <label className={`text-[10px] font-bold px-2 ${theme.textMuted}`}>List</label>
-                             <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-black/5 border-transparent'}`}>
-                               <ListIcon size={14} className="text-teal-500" />
-                               <input type="text" value={editingNote.list_name || ""} onChange={(e) => updateLocalNoteState(editingNote.id, "list_name", e.target.value)} placeholder="List name..." className={`bg-transparent border-none outline-none w-full text-sm font-medium ${theme.text}`} />
+                             <div className="flex flex-col gap-1">
+                               <label className={`text-[10px] font-bold px-2 ${theme.textMuted}`}>List</label>
+                               <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-black/5 border-transparent'}`}>
+                                 <ListIcon size={14} className="text-teal-500" />
+                                 <input type="text" value={editingNote.list_name || ""} onChange={(e) => updateLocalNoteState(editingNote.id, "list_name", e.target.value)} placeholder="List name..." className={`bg-transparent border-none outline-none w-full text-sm font-medium ${theme.text}`} />
+                               </div>
                              </div>
-                           </div>
-                           <div className="flex flex-col gap-1">
-                             <label className={`text-[10px] font-bold px-2 ${theme.textMuted}`}>Date</label>
-                             <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-black/5 border-transparent'}`}>
-                               <CalendarIcon size={14} className="text-teal-500" />
-                               <input type="date" value={editingNote.scheduled_for ? new Date(editingNote.scheduled_for).toISOString().split('T')[0] : ""} onChange={(e) => updateLocalNoteState(editingNote.id, "scheduled_for", e.target.value ? new Date(e.target.value).toISOString() : null)} className={`bg-transparent border-none outline-none w-full text-sm font-medium ${theme.text}`} />
+                             <div className="flex flex-col gap-1">
+                               <label className={`text-[10px] font-bold px-2 ${theme.textMuted}`}>Date</label>
+                               <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${isDark ? 'bg-black/20 border-white/5' : 'bg-black/5 border-transparent'}`}>
+                                 <CalendarIcon size={14} className="text-teal-500" />
+                                 <input type="date" value={editingNote.scheduled_for ? new Date(editingNote.scheduled_for).toISOString().split('T')[0] : ""} onChange={(e) => updateLocalNoteState(editingNote.id, "scheduled_for", e.target.value ? new Date(e.target.value).toISOString() : null)} className={`bg-transparent border-none outline-none w-full text-sm font-medium ${theme.text}`} />
+                               </div>
                              </div>
-                           </div>
-                           
-                           <div className={`pt-3 mt-3 border-t space-y-1 ${isDark ? 'border-white/10' : 'border-black/10'}`}>
-                             <button onClick={() => updateLocalNoteState(editingNote.id, "is_pinned", !editingNote.is_pinned)} className={`w-full flex items-center justify-between px-3 py-2 text-sm font-bold rounded-xl transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
-                               <span className="flex items-center gap-2"><Pin size={16} className={editingNote.is_pinned ? "fill-current text-teal-500" : ""} /> {editingNote.is_pinned ? 'Unpin Note' : 'Pin Note'}</span>
-                             </button>
-                             {(nav.workspace === 'personal' || teamRole === 'admin' || teamRole === 'editor' || editingNote.user_id === session?.user?.id) && (
-                               <button onClick={() => { moveToTrash(editingNote.id); handleCloseAndSave(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-red-500 hover:bg-red-500/10 rounded-xl transition-colors">
-                                 <Trash2 size={16} /> Move to Trash
+                             
+                             <div className={`pt-3 mt-3 border-t space-y-1 ${isDark ? 'border-white/10' : 'border-black/10'}`}>
+                               <button onClick={() => updateLocalNoteState(editingNote.id, "is_pinned", !editingNote.is_pinned)} className={`w-full flex items-center justify-between px-3 py-2 text-sm font-bold rounded-xl transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}>
+                                 <span className="flex items-center gap-2"><Pin size={16} className={editingNote.is_pinned ? "fill-current text-teal-500" : ""} /> {editingNote.is_pinned ? 'Unpin Note' : 'Pin Note'}</span>
                                </button>
-                             )}
+                               {(nav.workspace === 'personal' || teamRole === 'admin' || teamRole === 'editor' || editingNote.user_id === session?.user?.id) && (
+                                 <button onClick={() => { moveToTrash(editingNote.id); handleCloseAndSave(); }} className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-red-500 hover:bg-red-500/10 rounded-xl transition-colors">
+                                   <Trash2 size={16} /> Move to Trash
+                                 </button>
+                               )}
+                             </div>
                            </div>
-                         </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
 
-                <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.94 }} onClick={handleCloseAndSave} className={`px-8 py-3.5 rounded-full font-black transition-all text-sm flex items-center gap-2 shadow-lg ${theme.btnPrimary}`}>
-                  <Save size={18} strokeWidth={2} /> Save
-                </motion.button>
+                {canModify && (
+                  <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.94 }} onClick={handleCloseAndSave} className={`px-8 py-3.5 rounded-full font-black transition-all text-sm flex items-center gap-2 shadow-lg ${theme.btnPrimary}`}>
+                    <Save size={18} strokeWidth={2} /> Save
+                  </motion.button>
+                )}
               </div>
             </div>
 
             <div className="flex flex-1 overflow-hidden relative">
                <div className={`flex-1 flex flex-col w-full max-w-4xl mx-auto px-10 pt-16 pb-40 overflow-y-auto custom-scrollbar font-sans relative`}>
 
-                 <input type="text" placeholder="Untitled Note" value={editingNote.title || ''} onChange={(e) => updateLocalNoteState(editingNote.id, "title", e.target.value)} className={`w-full text-4xl md:text-5xl font-black tracking-tight bg-transparent border-none outline-none mb-6 placeholder:opacity-20 leading-tight ${theme.text}`} autoFocus />
+                 <input 
+                   type="text" 
+                   placeholder="Untitled Note" 
+                   value={editingNote.title || ''} 
+                   onChange={(e) => updateLocalNoteState(editingNote.id, "title", e.target.value)} 
+                   readOnly={!canModify}
+                   className={`w-full text-4xl md:text-5xl font-black tracking-tight bg-transparent border-none outline-none mb-6 placeholder:opacity-20 leading-tight ${theme.text} ${!canModify ? 'cursor-default' : ''}`} 
+                   autoFocus={canModify}
+                 />
 
                  <div className="relative w-full flex-1 flex flex-col">
                     <AnimatePresence>
-                       {mentionQuery.active && mentionQuery.target === 'note' && nav.workspace === 'team' && (
+                       {mentionQuery.active && mentionQuery.target === 'note' && nav.workspace === 'team' && canModify && (
                           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`absolute z-50 top-0 left-0 mt-10 w-72 rounded-2xl shadow-2xl border p-3 backdrop-blur-xl ${isDark ? 'bg-zinc-800/95 border-zinc-700' : 'bg-white/95 border-stone-200'}`}>
                              <p className={`text-[10px] font-bold uppercase tracking-widest px-4 py-2 mb-1 ${theme.textMuted}`}>Mention Team Member</p>
                              {teamMembers.filter((m: any) => m.name.toLowerCase().includes(mentionQuery.query.toLowerCase())).map((member: any) => (
@@ -2510,74 +2535,83 @@ function NoteEditorModal({ editingNote, updateLocalNoteState, handleCloseAndSave
                        <div className="flex flex-col gap-4 w-full">
                           {editingNote.checklist_items?.map((ci: any, index: number) => (
                              <div key={ci.id} className="flex items-center gap-4 group">
-                                <button aria-label="Toggle Checkbox" onClick={() => {
+                                <button aria-label="Toggle Checkbox" disabled={!canModify} onClick={() => {
+                                    if(!canModify) return;
                                     const newItems = [...editingNote.checklist_items];
                                     newItems[index].checked = !newItems[index].checked;
                                     updateLocalNoteState(editingNote.id, "checklist_items", newItems);
-                                }} className="shrink-0 transition-transform active:scale-90">
+                                }} className={`shrink-0 transition-transform ${canModify ? 'active:scale-90 cursor-pointer' : 'cursor-default opacity-70'}`}>
                                    {ci.checked ? <CheckSquare size={26} className="text-teal-500" /> : <Square size={26} className={theme.textMuted} />}
                                 </button>
                                 <input 
                                    value={ci.text} 
+                                   readOnly={!canModify}
                                    onChange={(e) => {
                                        const newItems = [...editingNote.checklist_items];
                                        newItems[index].text = e.target.value;
                                        updateLocalNoteState(editingNote.id, "checklist_items", newItems);
                                    }}
-                                   className={`flex-1 bg-transparent border-none outline-none text-xl font-medium transition-all ${ci.checked ? 'line-through text-stone-500 opacity-60' : theme.text}`}
-                                   placeholder="To do..."
+                                   className={`flex-1 bg-transparent border-none outline-none text-xl font-medium transition-all ${ci.checked ? 'line-through text-stone-500 opacity-60' : theme.text} ${!canModify ? 'cursor-default' : ''}`}
+                                   placeholder={canModify ? "To do..." : ""}
                                 />
-                                <button aria-label="Remove item" onClick={() => {
-                                    const newItems = editingNote.checklist_items.filter((_: any, i: number) => i !== index);
-                                    updateLocalNoteState(editingNote.id, "checklist_items", newItems);
-                                }} className="opacity-0 group-hover:opacity-100 text-stone-500 hover:text-red-500 transition-all p-2 rounded-full hover:bg-red-500/10 active:scale-95"><X size={20} /></button>
+                                {canModify && (
+                                   <button aria-label="Remove item" onClick={() => {
+                                       const newItems = editingNote.checklist_items.filter((_: any, i: number) => i !== index);
+                                       updateLocalNoteState(editingNote.id, "checklist_items", newItems);
+                                   }} className="opacity-0 group-hover:opacity-100 text-stone-500 hover:text-red-500 transition-all p-2 rounded-full hover:bg-red-500/10 active:scale-95"><X size={20} /></button>
+                                )}
                              </div>
                           ))}
-                          <button onClick={() => {
-                              const newItems = [...(editingNote.checklist_items || []), { id: `ci-${Date.now()}`, text: "", checked: false }];
-                              updateLocalNoteState(editingNote.id, "checklist_items", newItems);
-                          }} className="flex items-center gap-2 text-base text-teal-500 font-bold mt-6 px-5 py-3 w-fit hover:bg-teal-500/10 rounded-full transition-colors active:scale-95"><Plus size={20}/> Add Item</button>
+                          {canModify && (
+                             <button onClick={() => {
+                                 const newItems = [...(editingNote.checklist_items || []), { id: `ci-${Date.now()}`, text: "", checked: false }];
+                                 updateLocalNoteState(editingNote.id, "checklist_items", newItems);
+                             }} className="flex items-center gap-2 text-base text-teal-500 font-bold mt-6 px-5 py-3 w-fit hover:bg-teal-500/10 rounded-full transition-colors active:scale-95"><Plus size={20}/> Add Item</button>
+                          )}
                        </div>
                     ) : (
                        <RobustTextareaEditor 
                           ref={textareaRef} 
-                          placeholder="Start writing... Type @ to mention a team member." 
+                          placeholder={canModify ? "Start writing... Type @ to mention a team member." : "No content yet."}
                           value={editingNote.content || ''} 
                           onChange={(e: any) => handleTextareaChange(e)} 
                           theme={theme}
                           isDark={isDark}
+                          readOnly={!canModify}
                        />
                     )}
                  </div>
                </div>
 
-               <motion.div 
-                 initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2, ...modalSpring }}
-                 className={`absolute bottom-8 left-1/2 transform -translate-x-1/2 flex items-center gap-2 p-1.5 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.15)] border backdrop-blur-2xl z-50 ${isDark ? 'bg-[#18181b]/90 border-white/10' : 'bg-white/90 border-stone-200'}`}
-               >
-                 <div className="flex items-center gap-1 px-2">
-                    <button onClick={() => applyFormatting('**')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Bold" aria-label="Bold"><Bold size={16} strokeWidth={2}/></button>
-                    <button onClick={() => applyFormatting('*')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Italic" aria-label="Italic"><Italic size={16} strokeWidth={2}/></button>
-                    <button onClick={() => applyFormatting('~~')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Strikethrough" aria-label="Strikethrough"><Strikethrough size={16} strokeWidth={2}/></button>
-                    <div className={`w-px h-5 mx-1 ${isDark ? 'bg-white/10' : 'bg-black/10'}`} />
-                    <button onClick={() => applyFormatting('# ', '')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Heading" aria-label="Heading"><Heading1 size={16} strokeWidth={2}/></button>
-                    <button onClick={() => applyFormatting('- ', '')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Bullet List" aria-label="Bullet List"><ListIcon size={16} strokeWidth={2}/></button>
-                    <button onClick={() => applyFormatting('> ', '')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Quote" aria-label="Quote"><Quote size={16} strokeWidth={2}/></button>
-                    <button onClick={() => applyFormatting('`')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Code" aria-label="Code"><Code size={16} strokeWidth={2}/></button>
-                 </div>
-                 <div className={`w-px h-6 ${isDark ? 'bg-white/10' : 'bg-black/10'}`} />
-                 <div className="flex items-center gap-1 pr-2">
-                    <button 
-                       onClick={() => updateLocalNoteState(editingNote.id, "is_checklist", !editingNote.is_checklist)} 
-                       className={`px-4 py-2.5 rounded-full transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${editingNote.is_checklist ? 'bg-teal-500 text-white' : theme.btnGhost}`}
-                       title="Toggle Checklist"
-                       aria-label="Toggle Checklist"
-                    >
-                       <ListTodo size={16} strokeWidth={2} /> 
-                       {editingNote.is_checklist ? 'Checklist' : 'List'}
-                    </button>
-                 </div>
-               </motion.div>
+               {canModify && (
+                 <motion.div 
+                   initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2, ...modalSpring }}
+                   className={`absolute bottom-8 left-1/2 transform -translate-x-1/2 flex items-center gap-2 p-1.5 rounded-full shadow-[0_20px_40px_rgba(0,0,0,0.15)] border backdrop-blur-2xl z-50 ${isDark ? 'bg-[#18181b]/90 border-white/10' : 'bg-white/90 border-stone-200'}`}
+                 >
+                   <div className="flex items-center gap-1 px-2">
+                      <button onClick={() => applyFormatting('**')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Bold" aria-label="Bold"><Bold size={16} strokeWidth={2}/></button>
+                      <button onClick={() => applyFormatting('*')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Italic" aria-label="Italic"><Italic size={16} strokeWidth={2}/></button>
+                      <button onClick={() => applyFormatting('~~')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Strikethrough" aria-label="Strikethrough"><Strikethrough size={16} strokeWidth={2}/></button>
+                      <div className={`w-px h-5 mx-1 ${isDark ? 'bg-white/10' : 'bg-black/10'}`} />
+                      <button onClick={() => applyFormatting('# ', '')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Heading" aria-label="Heading"><Heading1 size={16} strokeWidth={2}/></button>
+                      <button onClick={() => applyFormatting('- ', '')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Bullet List" aria-label="Bullet List"><ListIcon size={16} strokeWidth={2}/></button>
+                      <button onClick={() => applyFormatting('> ', '')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Quote" aria-label="Quote"><Quote size={16} strokeWidth={2}/></button>
+                      <button onClick={() => applyFormatting('`')} className={`p-2.5 rounded-full ${theme.btnGhost}`} title="Code" aria-label="Code"><Code size={16} strokeWidth={2}/></button>
+                   </div>
+                   <div className={`w-px h-6 ${isDark ? 'bg-white/10' : 'bg-black/10'}`} />
+                   <div className="flex items-center gap-1 pr-2">
+                      <button 
+                         onClick={() => updateLocalNoteState(editingNote.id, "is_checklist", !editingNote.is_checklist)} 
+                         className={`px-4 py-2.5 rounded-full transition-colors flex items-center gap-2 text-xs font-bold uppercase tracking-widest ${editingNote.is_checklist ? 'bg-teal-500 text-white' : theme.btnGhost}`}
+                         title="Toggle Checklist"
+                         aria-label="Toggle Checklist"
+                      >
+                         <ListTodo size={16} strokeWidth={2} /> 
+                         {editingNote.is_checklist ? 'Checklist' : 'List'}
+                      </button>
+                   </div>
+                 </motion.div>
+               )}
             </div>
           </motion.div>
         </motion.div>
@@ -2637,7 +2671,7 @@ function ReactionBar({ item, currentUserId, onToggleReaction, isDark, theme }: a
 
 function TeamChatDrawer({ 
   isChatOpen, closeChat, navWorkspace, isDark, theme, chatMessages, chatScrollRef, session, 
-  mentionQuery, teamMembers, insertMention, chatInput, handleTextareaChange, handleSendChatMessage, chatInputRef 
+  mentionQuery, teamMembers, insertMention, chatInput, handleTextareaChange, handleSendChatMessage, chatInputRef, teamRole, clearChat 
 }: any) {
   if (!isChatOpen || navWorkspace !== 'team') return null;
 
@@ -2648,7 +2682,12 @@ function TeamChatDrawer({
     >
        <div className={`p-8 pb-5 border-b flex items-center justify-between ${isDark ? 'border-white/10' : 'border-stone-200'}`}>
           <h2 className="text-2xl font-black flex items-center gap-3"><MessageSquare size={24} className="text-teal-500" strokeWidth={2} /> Team Chat</h2>
-          <button aria-label="Close Chat" onClick={closeChat} className={`p-2.5 rounded-full transition-all active:scale-95 ${theme.btnGhost}`}><X size={20} strokeWidth={1.5} /></button>
+          <div className="flex items-center gap-2">
+            {teamRole === 'admin' && (
+               <button onClick={clearChat} title="Clear Chat" className="p-2.5 rounded-full transition-all active:scale-95 text-red-500 hover:bg-red-500/10"><Trash2 size={20} strokeWidth={1.5} /></button>
+            )}
+            <button aria-label="Close Chat" onClick={closeChat} className={`p-2.5 rounded-full transition-all active:scale-95 ${theme.btnGhost}`}><X size={20} strokeWidth={1.5} /></button>
+          </div>
        </div>
        
        <div ref={chatScrollRef} className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
@@ -3141,7 +3180,10 @@ const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFolders, c
                    <div className="flex flex-col gap-2 mt-2 text-sm z-20 pointer-events-auto">
                        {item.checklist_items.slice(0, viewMode === 'card' ? 4 : undefined).map((ci: any) => (
                           <div key={ci.id} className="flex items-start gap-2" onClick={e => e.stopPropagation()}>
-                              <button aria-label="Toggle Checkbox" onClick={() => toggleChecklistItem(item, ci.id)} className="mt-0.5 shrink-0 transition-transform active:scale-90">
+                              <button aria-label="Toggle Checkbox" disabled={!canModify} onClick={() => {
+                                  if(!canModify) return;
+                                  toggleChecklistItem(item, ci.id);
+                              }} className={`mt-0.5 shrink-0 transition-transform ${canModify ? 'active:scale-90 cursor-pointer' : 'cursor-default opacity-70'}`}>
                                  {ci.checked ? <CheckSquare size={16} className="text-teal-500" /> : <Square size={16} className={theme.textMuted} />}
                               </button>
                               <span className={`${ci.checked ? 'line-through opacity-50' : ''}`}>{ci.text}</span>
