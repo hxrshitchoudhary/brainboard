@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       sections: ['Inbox', 'Instagram'],
       creator: 'Extension Importer',
       // 👉 REPLACE WITH YOUR ACTUAL SUPABASE USER ID
-      user_id: 'PASTE_YOUR_ACTUAL_USER_ID_HERE', 
+      user_id: 'e7acff70-e1d7-4183-88a1-dbc2e9d2aedbgt', 
       created_at: new Date().toISOString()
     }));
 
