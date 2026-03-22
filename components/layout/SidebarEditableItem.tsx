@@ -1,80 +1,132 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreHorizontal, ChevronUp, ChevronDown, Edit2, Trash2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { MoreVertical, Edit2, Trash2, ArrowUp, ArrowDown, Check, X } from 'lucide-react';
 
-export function SidebarEditableItem({ icon, label, active, onClick, theme, isDark, canModify, onRename, onDelete, onMoveUp, onMoveDown, onDropItem }: any) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(label);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, onDelete, onMoveUp, onMoveDown, onDropItem, theme, isDark, canModify }: any) => {
+   const [isMenuOpen, setIsMenuOpen] = useState(false);
+   const [isEditing, setIsEditing] = useState(false);
+   const [editValue, setEditValue] = useState(label);
+   const [mounted, setMounted] = useState(false);
+   const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0 });
+   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setIsMenuOpen(false);
-    }
-    if (isMenuOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isMenuOpen]);
+   useEffect(() => {
+      setMounted(true);
+   }, []);
 
-  if (isEditing) {
-    return (
-      <div className={`flex items-center gap-2 px-4 py-3 rounded-xl border shadow-sm ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-stone-200'}`}>
-        <div className="text-teal-500">{icon}</div>
-        <input
-          autoFocus
-          value={editValue}
-          onChange={e => setEditValue(e.target.value)}
-          onBlur={() => { onRename(label, editValue); setIsEditing(false); }}
-          onKeyDown={e => { if(e.key === 'Enter') e.currentTarget.blur(); if(e.key === 'Escape') setIsEditing(false); }}
-          className={`bg-transparent outline-none w-full text-sm font-bold ${theme.text}`}
-        />
-      </div>
-    )
-  }
-
-  return (
-    <div 
-      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={(e) => {
-         e.preventDefault();
-         setIsDragOver(false);
-         try {
-             const rawData = e.dataTransfer.getData('application/x-brainboard-item');
-             if (!rawData) return; 
-             const data = JSON.parse(rawData);
-             if(data && data.id && onDropItem) onDropItem(data.id);
-         } catch(err) {}
-      }}
-      className={`group relative w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all ${isDragOver ? 'ring-2 ring-teal-500 bg-teal-500/10' : active ? (isDark ? 'bg-white/5 border border-white/5 shadow-sm text-teal-400' : 'bg-white border border-stone-200 shadow-sm text-teal-600') : `border border-transparent ${theme.btnGhost}`}`}
-    >
-      <button onClick={onClick} className="flex-1 flex items-center gap-3.5 text-left overflow-hidden">
-        <div className={`transition-colors ${active ? 'text-inherit' : 'text-stone-500 group-hover:text-stone-900 dark:group-hover:text-zinc-100'}`}>{icon}</div>
-        <span className="truncate">{label}</span>
-      </button>
+   useEffect(() => {
+      function handleClickOutside(event: MouseEvent) {
+         if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+            setIsMenuOpen(false);
+         }
+      }
       
-      {canModify && (
-        <div className="relative" ref={menuRef}>
-          <button aria-label="Item Options" onClick={(e) => { e.stopPropagation(); setIsMenuOpen(!isMenuOpen); }} className={`opacity-0 group-hover:opacity-100 p-1.5 rounded-full transition-all active:scale-95 ${isDark ? 'hover:bg-white/10' : 'hover:bg-stone-100'}`}>
-            <MoreHorizontal size={14} />
-          </button>
-          <AnimatePresence>
-            {isMenuOpen && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.95, y: -5 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -5 }} 
-                className={`absolute right-0 top-full mt-1 z-50 w-40 rounded-2xl shadow-xl border p-1.5 backdrop-blur-2xl ${isDark ? 'bg-zinc-800/95 border-zinc-700' : 'bg-white/95 border-stone-200'}`}
-              >
-                 <button onClick={(e) => { e.stopPropagation(); onMoveUp(); setIsMenuOpen(false); }} className={`w-full text-left px-3 py-2.5 text-xs font-bold rounded-xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300 hover:text-white' : 'hover:bg-stone-100 text-stone-600 hover:text-stone-900'}`}><ChevronUp size={14} strokeWidth={2}/> Move Up</button>
-                 <button onClick={(e) => { e.stopPropagation(); onMoveDown(); setIsMenuOpen(false); }} className={`w-full text-left px-3 py-2.5 text-xs font-bold rounded-xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300 hover:text-white' : 'hover:bg-stone-100 text-stone-600 hover:text-stone-900'}`}><ChevronDown size={14} strokeWidth={2}/> Move Down</button>
-                 <div className={`w-full h-px my-1.5 ${isDark ? 'bg-white/10' : 'bg-black/5'}`} />
-                 <button onClick={(e) => { e.stopPropagation(); setIsEditing(true); setIsMenuOpen(false); }} className={`w-full text-left px-3 py-2.5 text-xs font-bold rounded-xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300 hover:text-white' : 'hover:bg-stone-100 text-stone-600 hover:text-stone-900'}`}><Edit2 size={12} strokeWidth={2}/> Rename</button>
-                 <button onClick={(e) => { e.stopPropagation(); onDelete(); setIsMenuOpen(false); }} className="w-full text-left px-3 py-2.5 text-xs font-bold rounded-xl flex items-center gap-3 hover:bg-red-500/10 text-red-500 transition-colors"><Trash2 size={12} strokeWidth={2}/> Delete</button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-    </div>
-  );
-}
+      const handleScroll = () => {
+          setIsMenuOpen(false);
+      };
+
+      if (isMenuOpen) {
+          document.addEventListener("mousedown", handleClickOutside);
+          window.addEventListener("scroll", handleScroll, true);
+      }
+
+      return () => {
+          document.removeEventListener("mousedown", handleClickOutside);
+          window.removeEventListener("scroll", handleScroll, true);
+      };
+   }, [isMenuOpen]);
+
+   const handleRenameSubmit = () => {
+       if (editValue.trim() && editValue.trim() !== label) {
+           onRename(label, editValue.trim());
+       }
+       setIsEditing(false);
+   };
+
+   const openMenu = (e: React.MouseEvent) => {
+       e.preventDefault();
+       e.stopPropagation();
+       const rect = e.currentTarget.getBoundingClientRect();
+       setMenuCoords({ top: rect.top, left: rect.right + 12 });
+       setIsMenuOpen(true);
+   };
+
+   return (
+      <div 
+         className="relative group w-full"
+         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+         onDrop={(e) => {
+            e.preventDefault(); 
+            e.stopPropagation();
+            const data = e.dataTransfer.getData('application/x-brainboard-item');
+            if (data && onDropItem) {
+               const parsed = JSON.parse(data);
+               onDropItem(parsed.id);
+            }
+         }}
+      >
+         {isEditing ? (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl border shadow-sm ${theme.card}`}>
+               <input 
+                  autoFocus 
+                  type="text" 
+                  value={editValue} 
+                  onChange={e => setEditValue(e.target.value)} 
+                  onKeyDown={e => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') { setIsEditing(false); setEditValue(label); } }}
+                  className={`bg-transparent border-none outline-none text-sm font-bold w-full ${theme.text}`} 
+               />
+               <button onClick={handleRenameSubmit} className="text-teal-500 hover:text-teal-400"><Check size={14} strokeWidth={3} /></button>
+               <button onClick={() => { setIsEditing(false); setEditValue(label); }} className={theme.textMuted}><X size={14} strokeWidth={2.5} /></button>
+            </div>
+         ) : (
+            <div className="flex items-center relative">
+               <button 
+                   onClick={onClick} 
+                   className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-bold transition-all ${active ? (isDark ? 'bg-white/10 text-white shadow-inner' : 'bg-black/5 text-black shadow-inner') : `${theme.textMuted} ${theme.btnGhost}`}`}
+               >
+                   <span className={active ? 'text-teal-500' : ''}>{icon}</span>
+                   <span className="truncate">{label}</span>
+               </button>
+               
+               {canModify && (
+                   <button 
+                       onClick={openMenu} 
+                       className={`absolute right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity ${isMenuOpen ? 'opacity-100 bg-white/10' : 'hover:bg-white/10'} ${theme.textMuted}`}
+                   >
+                       <MoreVertical size={14} strokeWidth={2.5} />
+                   </button>
+               )}
+
+               {isMenuOpen && mounted && typeof document !== 'undefined' && createPortal(
+                  <div style={{ position: 'fixed', top: menuCoords.top, left: menuCoords.left, zIndex: 999999 }}>
+                     <motion.div
+                        ref={menuRef}
+                        initial={{ opacity: 0, scale: 0.95, x: -10 }}
+                        animate={{ opacity: 1, scale: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, x: -10 }}
+                        transition={{ duration: 0.15 }}
+                        className={`w-44 rounded-2xl border shadow-2xl flex flex-col p-1.5 backdrop-blur-3xl ${isDark ? 'bg-zinc-900/95 border-white/10' : 'bg-white/95 border-zinc-200'}`}
+                     >
+                        <button onClick={() => { setIsEditing(true); setIsMenuOpen(false); }} className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold rounded-xl transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}>
+                           <Edit2 size={14} /> Rename
+                        </button>
+                        <button onClick={() => { onMoveUp(); setIsMenuOpen(false); }} className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold rounded-xl transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}>
+                           <ArrowUp size={14} /> Move Up
+                        </button>
+                        <button onClick={() => { onMoveDown(); setIsMenuOpen(false); }} className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold rounded-xl transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}>
+                           <ArrowDown size={14} /> Move Down
+                        </button>
+                        <div className={`w-full h-px my-1 mx-auto ${isDark ? 'bg-white/10' : 'bg-black/5'}`} />
+                        <button onClick={() => { onDelete(); setIsMenuOpen(false); }} className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold rounded-xl text-red-500 hover:bg-red-500/10 transition-colors">
+                           <Trash2 size={14} /> Delete
+                        </button>
+                     </motion.div>
+                  </div>,
+                  document.body
+               )}
+            </div>
+         )}
+      </div>
+   );
+};

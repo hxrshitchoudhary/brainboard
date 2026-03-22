@@ -76,7 +76,6 @@ export default function BrainboardBalanced() {
 
   const [activeIndex, setActiveIndex] = useState(-1);
   
-  // PERFORMANCE: Lasso bounding box cache
   const cardBoundsRef = useRef<{ id: string, rect: DOMRect }[]>([]);
   const rafRef = useRef<number | null>(null);
 
@@ -207,13 +206,15 @@ export default function BrainboardBalanced() {
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return; 
-    if ((e.target as HTMLElement).closest('.group\\/card')) return;
-    if (['BUTTON', 'INPUT', 'SELECT', 'A', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+    
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('textarea') || target.closest('.lasso-selectable') || target.closest('.group\\/card')) {
+        return;
+    }
 
     setLasso({ active: true, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY });
     setInitialSelection(e.shiftKey ? new Set(selectedItems) : new Set());
 
-    // CACHE BOUNDS ONCE ON CLICK FOR LAG-FREE LASSO
     const cards = document.querySelectorAll('.lasso-selectable');
     cardBoundsRef.current = Array.from(cards).map(card => ({
         id: card.getAttribute('data-id')!,
@@ -598,8 +599,8 @@ export default function BrainboardBalanced() {
     showToast("Team chat cleared.");
   };
 
-  const canModifyStructure = nav.workspace === 'personal' || teamRole === 'admin' || teamRole === 'editor';
-  const canCreate = nav.workspace === 'personal' || teamRole === 'admin' || teamRole === 'editor';
+  const canModifyStructure = nav.workspace === 'personal' || teamRole !== 'viewer';
+  const canCreate = nav.workspace === 'personal' || teamRole !== 'viewer';
 
   const handleNewNote = () => {
     if (!session?.user?.id) return;
@@ -941,7 +942,7 @@ export default function BrainboardBalanced() {
                 transition={{ duration: 0.7, delay: 0.1 }} 
                 className="text-7xl md:text-8xl lg:text-[8rem] font-black tracking-tighter mb-10 leading-[0.95] w-full drop-shadow-2xl"
             >
-                Curate your <span className="text-transparent bg-clip-text bg-linear-to-br from-teal-400 to-emerald-600">mind.</span>
+                Curate your <span className="text-transparent bg-clip-text bg-gradient-to-br from-teal-400 to-emerald-600">mind.</span>
             </motion.h1>
             <motion.button 
                 whileHover={bounceHover} 
@@ -969,18 +970,6 @@ export default function BrainboardBalanced() {
       `}} />
 
       <div className="fixed inset-0 z-0 pointer-events-none opacity-[0.02] mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
-
-      {lasso.active && (
-        <div
-          className="fixed border border-teal-500/50 bg-teal-500/10 z-[9999] pointer-events-none rounded-lg backdrop-blur-sm transition-none"
-          style={{ 
-              left: Math.min(lasso.startX, lasso.currentX), 
-              top: Math.min(lasso.startY, lasso.currentY), 
-              width: Math.abs(lasso.currentX - lasso.startX), 
-              height: Math.abs(lasso.currentY - lasso.startY) 
-          }}
-        />
-      )}
 
       <Toaster theme={isDark ? 'dark' : 'light'} position="bottom-right" style={{ zIndex: 99999 }} />
       
@@ -1043,7 +1032,96 @@ export default function BrainboardBalanced() {
          </Command.List>
       </Command.Dialog>
 
-      <aside className={`hidden md:flex w-64 h-full shrink-0 flex-col relative z-20 transition-colors duration-700 rounded-3xl border shadow-xl ${theme.island}`}>
+      <input type="file" ref={fileInputRef} onChange={handleMediaUpload} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.txt" multiple className="hidden" />
+      <input type="file" ref={avatarInputRef} onChange={handleAvatarUpload} accept="image/*" className="hidden" />
+
+      <OnboardingModal ui={ui} profile={profile} updateProfile={updateProfile} handleUpdateProfile={handleUpdateProfile} theme={theme} isDark={isDark} />
+      <LogoutConfirmModal ui={ui} updateUi={updateUi} handleSecureLogout={handleSecureLogout} theme={theme} isDark={isDark} />
+      
+      <SettingsModal 
+          ui={ui} 
+          updateUi={updateUi} 
+          profile={profile} 
+          updateProfile={updateProfile} 
+          handleUpdateProfile={handleUpdateProfile} 
+          currentAvatar={currentAvatar} 
+          userDisplayName={userDisplayName} 
+          userHandle={userHandle} 
+          avatarInputRef={avatarInputRef} 
+          teamRole={teamRole} 
+          teamMembers={teamMembers} 
+          session={session} 
+          handleUpdateMemberRole={handleUpdateMemberRole} 
+          theme={theme} 
+          isDark={isDark} 
+      />
+      
+      <MediaViewerModal 
+          media={media} 
+          updateMedia={updateMedia} 
+          closeMediaViewer={closeMediaViewer} 
+          session={session} 
+          teamRole={teamRole} 
+          nav={nav} 
+          setEditingNote={setEditingNote} 
+          profile={profile} 
+          teamWorkspaceId={teamWorkspaceId} 
+          moveToTrash={moveToTrash} 
+          toggleItemReaction={toggleItemReaction} 
+          theme={theme} 
+          isDark={isDark} 
+          items={items} 
+      />
+      
+      <NoteEditorModal 
+          editingNote={editingNote} 
+          updateLocalNoteState={updateLocalNoteState} 
+          handleCloseAndSave={handleCloseAndSave} 
+          moveToTrash={moveToTrash} 
+          ui={ui} 
+          updateUi={updateUi} 
+          theme={theme} 
+          isDark={isDark} 
+          teamMembers={teamMembers} 
+          mentionQuery={mentionQuery} 
+          setMentionQuery={setMentionQuery} 
+          nav={nav} 
+          session={session} 
+          teamRole={teamRole} 
+          showToast={showToast} 
+          toggleItemReaction={toggleItemReaction} 
+          items={items} 
+          profile={profile} 
+      />
+
+      <AnimatePresence>
+        {playingYouTubeId && (
+           <motion.div 
+               initial={{ opacity: 0 }} 
+               animate={{ opacity: 1 }} 
+               exit={{ opacity: 0 }} 
+               transition={{ duration: 0.2 }} 
+               className="fixed inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-2xl p-4 md:p-10" 
+               style={{ zIndex: 99999 }} 
+               onClick={() => setPlayingYouTubeId(null)}
+           >
+             <button onClick={() => setPlayingYouTubeId(null)} className="absolute top-6 right-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+                 <X size={24} />
+             </button>
+             <motion.div 
+                 initial={{ scale: 0.95, y: 20 }} 
+                 animate={{ scale: 1, y: 0 }} 
+                 transition={modalSpring} 
+                 className="w-full max-w-6xl aspect-video rounded-3xl overflow-hidden shadow-2xl bg-black border border-white/10" 
+                 onClick={e => e.stopPropagation()}
+             >
+                <iframe src={`https://www.youtube.com/embed/${playingYouTubeId}?autoplay=1&rel=0`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+             </motion.div>
+           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <aside className={`hidden md:flex w-64 h-full shrink-0 flex-col relative z-50 transition-colors duration-700 rounded-3xl border shadow-xl ${theme.island}`}>
          <div className="p-6 pb-2 pt-8 flex justify-between items-center">
              <h1 className="font-bold text-2xl tracking-tighter flex items-center gap-2 drop-shadow-sm">
               <Sparkles className="text-teal-500" size={22} strokeWidth={1.5} /> brainboard
@@ -1202,20 +1280,34 @@ export default function BrainboardBalanced() {
 
       <main 
         ref={mainContentRef}
-        onPointerDown={handlePointerDown}
-        className={`flex-1 rounded-3xl flex flex-col relative w-full overflow-hidden focus:outline-none shadow-2xl border ${theme.island}`}
+        className={`flex-1 rounded-3xl flex flex-col relative w-full overflow-hidden shadow-2xl border ${theme.island}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         tabIndex={0} 
       >
+        {lasso.active && (
+          <div
+            className="fixed border border-teal-500/50 bg-teal-500/10 transition-none pointer-events-none rounded-lg backdrop-blur-sm"
+            style={{ 
+                zIndex: 9999,
+                display: lasso.active ? 'block' : 'none',
+                left: Math.min(lasso.startX, lasso.currentX), 
+                top: Math.min(lasso.startY, lasso.currentY), 
+                width: Math.abs(lasso.currentX - lasso.startX), 
+                height: Math.abs(lasso.currentY - lasso.startY) 
+            }}
+          />
+        )}
+
         <AnimatePresence>
            {isSelectMode && (
               <motion.div 
                  initial={{ y: 100, opacity: 0, x: '-50%' }} 
                  animate={{ y: 0, opacity: 1, x: '-50%' }} 
                  exit={{ y: 100, opacity: 0, x: '-50%' }}
-                 className="fixed bottom-20 md:bottom-10 left-1/2 flex items-center gap-2 md:gap-3 px-3 py-3 rounded-full shadow-2xl border backdrop-blur-3xl bg-[#1C1C1E]/95 border-white/10 w-[90%] md:w-auto max-w-lg justify-between md:justify-start z-[9999]"
+                 className="fixed bottom-20 md:bottom-10 left-1/2 flex items-center gap-2 md:gap-3 px-3 py-3 rounded-full shadow-2xl border backdrop-blur-3xl bg-[#1C1C1E]/95 border-white/10 w-[90%] md:w-auto max-w-lg justify-between md:justify-start"
+                 style={{ zIndex: 9999 }}
               >
                  <div className="px-2 md:px-4 border-r border-white/10 flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-3 shrink-0">
                     <span className="text-white text-xs md:text-sm font-black tracking-tight">{selectedItems.size} <span className="text-zinc-400 font-bold hidden sm:inline">Selected</span></span>
@@ -1275,9 +1367,9 @@ export default function BrainboardBalanced() {
                 initial={{ opacity: 0 }} 
                 animate={{ opacity: 1 }} 
                 exit={{ opacity: 0 }} 
-                className="absolute inset-0 z-50 bg-teal-500/10 backdrop-blur-md border-4 border-teal-500/50 border-dashed m-6 rounded-3xl flex items-center justify-center pointer-events-none"
+                className="absolute inset-0 z-50 bg-teal-500/10 backdrop-blur-md border-4 border-teal-500/50 border-dashed m-6 flex items-center justify-center pointer-events-none rounded-3xl"
             >
-              <div className="bg-white dark:bg-zinc-900 px-10 py-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-stone-200 dark:border-zinc-800">
+              <div className="bg-white dark:bg-zinc-900 px-10 py-8 shadow-2xl flex flex-col items-center gap-4 border border-stone-200 dark:border-zinc-800 rounded-3xl">
                 <UploadCloud size={48} strokeWidth={1.5} className="text-teal-500 animate-bounce" />
                 <h2 className="text-2xl font-bold tracking-tight">Drop files to upload</h2>
               </div>
@@ -1285,62 +1377,62 @@ export default function BrainboardBalanced() {
           )}
         </AnimatePresence>
 
-        <header className="w-full px-6 md:px-12 pt-8 pb-4 shrink-0 flex items-center justify-between gap-6 relative z-50 bg-transparent">
+        <header className="w-full px-6 md:px-12 pt-8 pb-4 shrink-0 flex items-center justify-between gap-6 relative z-40 bg-transparent">
           <div className="flex-1 max-w-2xl flex items-center gap-4">
             
             <div className="relative group flex-1">
               <Search className={`absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors ${theme.textMuted} group-focus-within:text-teal-500`} />
-              <input type="text" placeholder={`Search your mind...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`w-full rounded-2xl py-3 pl-12 pr-12 text-sm font-medium outline-none transition-all ${theme.input} leading-normal`} />
+              <input type="text" placeholder={`Search your mind...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`w-full py-3 pl-12 pr-12 text-sm font-medium outline-none transition-all rounded-2xl ${theme.input} leading-normal`} />
               <div className="absolute right-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-1 opacity-50">
                   <CmdIcon size={12} /><span className="text-[10px] font-bold font-mono">K</span>
               </div>
             </div>
 
-            <div className={`hidden md:flex items-center p-1 rounded-xl border shadow-sm ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
+            <div className={`hidden md:flex items-center p-1 border shadow-sm rounded-xl ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="Masonry Grid" onClick={() => updateNav({ viewMode: 'grid' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'grid' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                 <button aria-label="Masonry Grid" onClick={() => updateNav({ viewMode: 'grid' })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === 'grid' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
                      <Columns size={18} strokeWidth={1.5} />
                  </button>
-                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                      Masonry Grid
                  </div>
                </div>
                
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="Uniform Cards" onClick={() => updateNav({ viewMode: 'card' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'card' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                 <button aria-label="Uniform Cards" onClick={() => updateNav({ viewMode: 'card' })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === 'card' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
                      <LayoutGrid size={18} strokeWidth={1.5} />
                  </button>
-                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                      Uniform Cards
                  </div>
                </div>
                
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="List View" onClick={() => updateNav({ viewMode: 'list' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'list' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                 <button aria-label="List View" onClick={() => updateNav({ viewMode: 'list' })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === 'list' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
                      <AlignJustify size={18} strokeWidth={1.5} />
                  </button>
-                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                      List View
                  </div>
                </div>
                
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="Calendar View" onClick={() => updateNav({ viewMode: 'calendar' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'calendar' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                 <button aria-label="Calendar View" onClick={() => updateNav({ viewMode: 'calendar' })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === 'calendar' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
                      <CalendarIcon size={18} strokeWidth={1.5} />
                  </button>
-                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                      Calendar View
                  </div>
                </div>
             </div>
           </div>
           
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 shrink-0 z-50">
             <div className="relative group/tooltip flex items-center justify-center">
-               <button aria-label="Manual Sync" onClick={() => fetchItems(1, false)} className={`p-3 rounded-xl transition-all active:scale-95 shadow-sm ${isDark ? 'bg-[#18181B] border border-white/5 text-teal-400 hover:bg-white/10' : 'bg-white border border-black/5 text-teal-600 hover:bg-black/5'}`}>
+               <button aria-label="Manual Sync" onClick={() => fetchItems(1, false)} className={`p-3 transition-all active:scale-95 shadow-sm rounded-xl ${isDark ? 'bg-[#18181B] border border-white/5 text-teal-400 hover:bg-white/10' : 'bg-white border border-black/5 text-teal-600 hover:bg-black/5'}`}>
                   <RefreshCw size={18} strokeWidth={2} className={ui.isSyncing ? "animate-spin" : ""} />
                </button>
-               <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+               <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                    Manual Sync
                </div>
             </div>
@@ -1351,16 +1443,16 @@ export default function BrainboardBalanced() {
                {nav.workspace === 'team' && (
                  <>
                    <div className="relative group/tooltip hidden md:flex items-center justify-center">
-                      <button aria-label="Team Chat" onClick={() => updateUi({ isChatOpen: !ui.isChatOpen })} className={`p-3 rounded-xl shadow-sm transition-all active:scale-95 ${ui.isChatOpen ? 'bg-teal-500 text-white border border-teal-600' : (isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5')}`}>
+                      <button aria-label="Team Chat" onClick={() => updateUi({ isChatOpen: !ui.isChatOpen })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${ui.isChatOpen ? 'bg-teal-500 text-white border border-teal-600' : (isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5')}`}>
                          <MessageSquare size={18} strokeWidth={ui.isChatOpen ? 2 : 1.5} className={ui.isChatOpen ? 'text-white' : theme.textMuted} />
                       </button>
-                      <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                      <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                           Team Chat
                       </div>
                    </div>
 
                    <div className="relative">
-                      <button aria-label="Notifications" onClick={() => updateUi({ showNotifications: !ui.showNotifications })} className={`p-3 rounded-xl shadow-sm transition-all active:scale-95 ${isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5'}`}>
+                      <button aria-label="Notifications" onClick={() => updateUi({ showNotifications: !ui.showNotifications })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5'}`}>
                          <Bell size={18} strokeWidth={1.5} className={theme.textMuted} />
                          {notifications.some(n => !n.read) && <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-[#18181B] dark:border-zinc-900" />}
                       </button>
@@ -1368,7 +1460,7 @@ export default function BrainboardBalanced() {
                          {ui.showNotifications && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => updateUi({ showNotifications: false })} />
-                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-72 md:w-80 z-50 rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.4)] border backdrop-blur-3xl p-2 ${isDark ? 'bg-zinc-900/95 border-zinc-800' : 'bg-white/95 border-[#e8e4dc]'}`}>
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-72 md:w-80 z-50 shadow-2xl border backdrop-blur-3xl p-2 rounded-3xl ${isDark ? 'bg-zinc-900/95 border-zinc-800' : 'bg-white/95 border-[#e8e4dc]'}`}>
                                  <div className="p-4 border-b border-black/5 dark:border-white/5 mb-2 flex items-center justify-between">
                                     <h4 className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>Notifications</h4>
                                     {notifications.some(n => !n.read) && (
@@ -1379,7 +1471,7 @@ export default function BrainboardBalanced() {
                                     {notifications.length === 0 ? (
                                        <div className="p-6 text-center text-sm text-stone-500">No new notifications.</div>
                                     ) : notifications.map(n => (
-                                       <div key={n.id} onClick={() => handleMarkAsRead(n.id)} className={`p-4 rounded-[16px] transition-colors cursor-pointer group ${n.read ? 'opacity-60' : (isDark ? 'bg-white/5' : 'bg-black/5')} hover:bg-teal-500/10 relative`}>
+                                       <div key={n.id} onClick={() => handleMarkAsRead(n.id)} className={`p-4 transition-colors cursor-pointer group rounded-2xl ${n.read ? 'opacity-60' : (isDark ? 'bg-white/5' : 'bg-black/5')} hover:bg-teal-500/10 relative`}>
                                           <p className={`text-sm font-medium leading-snug mb-1.5 pr-6 ${theme.text}`}>{n.text}</p>
                                           <p className="text-[10px] font-bold text-teal-500 uppercase tracking-widest">{formatDistanceToNow(n.time)} ago</p>
                                           {!n.read && <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100"><CheckCircle size={18} className="text-teal-500" /></div>}
@@ -1393,21 +1485,19 @@ export default function BrainboardBalanced() {
                    </div>
 
                    <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="relative hidden md:block">
-                      <button aria-label="Team Presence" onClick={() => updateUi({ showTeamPresence: !ui.showTeamPresence })} className={`flex items-center p-1.5 rounded-xl shadow-sm cursor-pointer active:scale-95 hover:shadow-md transition-all border ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
+                      <button aria-label="Team Presence" onClick={() => updateUi({ showTeamPresence: !ui.showTeamPresence })} className={`flex items-center p-1.5 shadow-md cursor-pointer active:scale-95 hover:shadow-lg transition-all border rounded-xl ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
                         <div className="flex -space-x-2 pl-1.5">
                           {teamMembers.filter(m => m.inWorkspace).slice(0, 3).map((member, i) => (
                              <img key={i} className={`inline-block h-8 w-8 rounded-full ring-2 object-cover ${isDark ? 'ring-[#18181B]' : 'ring-white'}`} src={member.avatar} alt=""/>
                           ))}
                         </div>
-                        <div className="px-4 flex items-center gap-1.5 text-xs font-bold text-stone-500 uppercase tracking-widest">
-                            <Users size={14} strokeWidth={2}/> Team
-                        </div>
+                        <div className="px-4 flex items-center gap-1.5 text-xs font-bold text-stone-500 uppercase tracking-widest"><Users size={14} strokeWidth={2}/> Team</div>
                       </button>
                       <AnimatePresence>
                          {ui.showTeamPresence && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => updateUi({ showTeamPresence: false })} />
-                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-80 z-50 rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.4)] border backdrop-blur-3xl flex flex-col overflow-hidden ${isDark ? 'bg-zinc-900/95 border-zinc-800' : 'bg-white/95 border-[#e8e4dc]'}`}>
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-80 z-50 shadow-2xl border backdrop-blur-3xl flex flex-col overflow-hidden rounded-3xl ${isDark ? 'bg-zinc-900/95 border-zinc-800' : 'bg-white/95 border-[#e8e4dc]'}`}>
                                  <div className="flex flex-col gap-1 max-h-80 overflow-y-auto custom-scrollbar p-2">
                                     
                                     <div className="px-3 pt-3 pb-2">
@@ -1418,7 +1508,7 @@ export default function BrainboardBalanced() {
                                           <div className="px-3 py-2 text-sm text-stone-500 font-medium">No one online.</div>
                                        ) : (
                                           teamMembers.filter(m => m.inWorkspace && m.status === 'online').map(member => (
-                                             <div key={member.id} className="flex items-center justify-between gap-3 w-full px-3 py-2 rounded-[16px] bg-black/5 dark:bg-white/5">
+                                             <div key={member.id} className="flex items-center justify-between gap-3 w-full px-3 py-2 bg-black/5 dark:bg-white/5 rounded-2xl">
                                                 <div className="flex items-center gap-3 min-w-0 flex-1">
                                                    <img src={member.avatar} className="w-8 h-8 rounded-full object-cover shadow-sm shrink-0" />
                                                    <span className={`text-sm font-bold truncate ${theme.text}`}>{cleanName(member.name)}</span>
@@ -1436,7 +1526,7 @@ export default function BrainboardBalanced() {
                                     </div>
                                     <div className="flex flex-col gap-1 px-1 pb-2">
                                        {teamMembers.filter(m => m.inWorkspace && m.status === 'offline').map(member => (
-                                          <div key={member.id} className="flex items-center justify-between gap-3 w-full px-3 py-2 rounded-[16px] opacity-60">
+                                          <div key={member.id} className="flex items-center justify-between gap-3 w-full px-3 py-2 opacity-60 rounded-2xl">
                                              <div className="flex items-center gap-3 min-w-0 flex-1">
                                                 <img src={member.avatar} className="w-8 h-8 rounded-full object-cover grayscale shrink-0" />
                                                 <span className={`text-sm font-bold truncate ${theme.text}`}>{cleanName(member.name)}</span>
@@ -1456,45 +1546,43 @@ export default function BrainboardBalanced() {
                )}
             </AnimatePresence>
             
-            <AnimatePresence mode="wait">
-              {nav.categoryType === 'trash' ? (
-                <button key="btn-trash" aria-label="Empty Trash" onClick={emptyTrash} className={`px-6 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center gap-2 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white`}>
-                  <Trash2 size={16} strokeWidth={2} /> <span className="hidden md:inline">Empty Trash</span>
-                </button>
-              ) : (
-                <motion.div key="btn-all" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex gap-2">
-                  {canCreate && (
-                     <>
-                        <div className="relative group/tooltip flex items-center justify-center">
-                           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} aria-label="Upload Files" onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`p-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center shadow-sm ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-black'}`}>
-                              <ImageIcon size={18} strokeWidth={1.5} />
-                           </motion.button>
-                           <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
-                               Upload File, Image, Video, Audio
-                           </div>
-                        </div>
-                        
-                        <div className="relative group/tooltip flex items-center justify-center">
-                           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} aria-label="New Checklist" onClick={handleNewChecklist} className={`p-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center shadow-sm ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-black'}`}>
-                              <CheckSquare size={18} strokeWidth={1.5} />
-                           </motion.button>
-                           <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
-                               New Checklist
-                           </div>
-                        </div>
+            {nav.categoryType === 'trash' ? (
+              <button key="btn-trash" aria-label="Empty Trash" onClick={emptyTrash} className={`px-6 py-3 text-sm font-bold transition-all active:scale-95 flex items-center gap-2 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white rounded-xl`}>
+                <Trash2 size={16} strokeWidth={2} /> <span className="hidden md:inline">Empty Trash</span>
+              </button>
+            ) : (
+              <div className="flex gap-3">
+                {canCreate && (
+                   <>
+                      <div className="relative group/tooltip flex items-center justify-center">
+                         <button aria-label="Upload Files" onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? 'bg-[#18181B] border-white/5 hover:bg-white/10' : 'bg-white border-black/5 hover:bg-black/5'}`}>
+                            <ImageIcon size={18} strokeWidth={1.5} className={isDark ? 'text-zinc-400' : 'text-zinc-600'} />
+                         </button>
+                         <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
+                             Upload File
+                         </div>
+                      </div>
+                      
+                      <div className="relative group/tooltip flex items-center justify-center">
+                         <button aria-label="New Checklist" onClick={handleNewChecklist} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? 'bg-[#18181B] border-white/5 hover:bg-white/10' : 'bg-white border-black/5 hover:bg-black/5'}`}>
+                            <CheckSquare size={18} strokeWidth={1.5} className={isDark ? 'text-zinc-400' : 'text-zinc-600'} />
+                         </button>
+                         <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
+                             New Checklist
+                         </div>
+                      </div>
 
-                        <motion.button aria-label="New Note" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleNewNote} className={`px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 ${theme.btnPrimary}`}>
-                           <Plus size={16} strokeWidth={2} /> <span className="hidden md:inline">New Note</span>
-                        </motion.button>
-                     </>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                      <button aria-label="New Note" onClick={handleNewNote} className={`h-11 px-6 text-sm font-bold flex items-center gap-2 rounded-[14px] transition-colors shadow-sm ${theme.btnPrimary}`}>
+                         <Plus size={18} strokeWidth={2.5} /> <span className="hidden md:inline">New Note</span>
+                      </button>
+                   </>
+                )}
+              </div>
+            )}
           </div>
         </header>
 
-        <div className="px-6 md:px-12 pb-4 md:pb-6 flex flex-col relative z-40 bg-transparent pt-4">
+        <div className="px-6 md:px-12 pb-4 pt-4 flex flex-col relative z-30 bg-transparent shrink-0">
            <div className="flex items-end justify-between">
              {nav.viewMode === 'grid' || nav.viewMode === 'card' || nav.viewMode === 'list' ? (
                 <>
@@ -1510,14 +1598,14 @@ export default function BrainboardBalanced() {
              ) : (
                 <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
                   <h2 className="text-3xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">{format(nav.currentDate, 'MMMM yyyy')}</h2>
-                  <div className={`flex items-center gap-1 border rounded-full p-1 shadow-md backdrop-blur-md ${isDark ? 'bg-zinc-900/50 border-zinc-800/80' : 'bg-white border-stone-200'}`}>
-                     <button aria-label="Previous Month" onClick={() => updateNav({ currentDate: subMonths(nav.currentDate, 1) })} className={`p-2.5 rounded-full transition-colors active:scale-95 ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
+                  <div className={`flex items-center gap-1 border p-1 shadow-md backdrop-blur-md rounded-full ${isDark ? 'bg-zinc-900/50 border-zinc-800/80' : 'bg-white border-stone-200'}`}>
+                     <button aria-label="Previous Month" onClick={() => updateNav({ currentDate: subMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-full ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
                          <ChevronLeft size={18} strokeWidth={1.5}/>
                      </button>
-                     <button onClick={() => updateNav({ currentDate: new Date() })} className={`px-5 py-2 text-sm font-bold rounded-full transition-colors active:scale-95 ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-black/5 text-stone-500'}`}>
+                     <button onClick={() => updateNav({ currentDate: new Date() })} className={`px-5 py-2 text-sm font-bold transition-colors active:scale-95 rounded-full ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-black/5 text-stone-500'}`}>
                          Today
                      </button>
-                     <button aria-label="Next Month" onClick={() => updateNav({ currentDate: addMonths(nav.currentDate, 1) })} className={`p-2.5 rounded-full transition-colors active:scale-95 ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
+                     <button aria-label="Next Month" onClick={() => updateNav({ currentDate: addMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-full ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
                          <ChevronRightIcon size={18} strokeWidth={1.5}/>
                      </button>
                   </div>
@@ -1531,19 +1619,19 @@ export default function BrainboardBalanced() {
                     initial={{ opacity: 0, height: 0 }} 
                     animate={{ opacity: 1, height: 'auto' }} 
                     exit={{ opacity: 0, height: 0 }}
-                    className={`flex flex-col gap-4 mt-6 pt-4 border-t ${isDark ? 'border-white/5' : 'border-black/5'} w-full relative z-30`}
+                    className={`flex flex-col gap-4 mt-6 pt-4 border-t w-full relative z-30 ${isDark ? 'border-white/5' : 'border-black/5'}`}
                  >
-                    <div className={`relative flex items-center w-full max-w-md rounded-2xl overflow-hidden border focus-within:border-teal-500 transition-colors shadow-md ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
+                    <div className={`relative flex items-center w-full max-w-md overflow-hidden border focus-within:border-teal-500 transition-colors shadow-md rounded-2xl ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
                        <Search size={16} className={`absolute left-4 ${theme.textMuted}`} />
                        <input type="text" placeholder="Search tags..." value={tagSearchQuery} onChange={e => setTagSearchQuery(e.target.value)} className={`w-full bg-transparent border-none py-3 pl-11 pr-4 text-sm font-medium outline-none ${theme.text}`} />
                     </div>
                     
                     <div className="w-full flex flex-wrap gap-2 pt-1 pb-2">
-                       <button onClick={() => updateNav({ categoryType: 'hashtags' as any, category: 'All' })} className={`px-4 py-2 rounded-full text-xs font-bold transition-all border shrink-0 ${(nav.categoryType as any) === 'hashtags' ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
+                       <button onClick={() => updateNav({ categoryType: 'hashtags' as any, category: 'All' })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-full ${(nav.categoryType as any) === 'hashtags' ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
                            All Hashtags
                        </button>
                        {smartTags.filter((t: string) => t.toLowerCase().includes(tagSearchQuery.toLowerCase())).map((tag: string) => (
-                          <button key={tag} onClick={() => updateNav({ categoryType: 'tag', category: tag })} className={`px-4 py-2 rounded-full text-xs font-bold transition-all border shrink-0 ${nav.categoryType === 'tag' && nav.category === tag ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
+                          <button key={tag} onClick={() => updateNav({ categoryType: 'tag', category: tag })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-full ${nav.categoryType === 'tag' && nav.category === tag ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
                               #{tag}
                           </button>
                        ))}
@@ -1553,184 +1641,188 @@ export default function BrainboardBalanced() {
            </AnimatePresence>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 md:px-12 pb-24 md:pb-20 custom-scrollbar relative z-10">
-          {isLoading && page === 1 ? (
-             <div className={nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6" : nav.viewMode === 'list' ? "flex flex-col gap-3" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"}>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                   <div key={i} className={`rounded-3xl border relative overflow-hidden ${theme.card} h-64 md:h-85 break-inside-avoid`}>
-                      <div className={`absolute inset-0 -translate-x-full bg-linear-to-r from-transparent ${isDark ? 'via-white/5' : 'via-black/5'} to-transparent animate-shimmer`} />
+        <div className="flex-1 overflow-y-auto px-6 md:px-12 pb-24 md:pb-20 custom-scrollbar relative z-10 w-full">
+           
+           <div className="absolute inset-0 z-0 cursor-crosshair" style={{ minHeight: '200vh' }} onPointerDown={handlePointerDown} />
+           
+           <div className="relative z-10">
+               {isLoading && page === 1 ? (
+                  <div className={nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6 pointer-events-none" : nav.viewMode === 'list' ? "flex flex-col gap-3 pointer-events-none" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pointer-events-none"}>
+                     {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                        <div key={i} className={`border relative overflow-hidden ${theme.card} h-64 md:h-85 break-inside-avoid inline-block w-full mb-6 rounded-3xl`}>
+                           <div className={`absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent ${isDark ? 'via-white/5' : 'via-black/5'} to-transparent animate-shimmer`} />
+                        </div>
+                     ))}
+                  </div>
+               ) : filteredData.length === 0 && (nav.viewMode === 'grid' || nav.viewMode === 'card') ? (
+                  <div className="flex-1 w-full flex flex-col items-center mt-20 text-center opacity-50 px-4 pointer-events-none">
+                     <div className={`w-full max-w-lg border border-dashed p-16 flex flex-col items-center justify-center transition-colors shadow-sm rounded-3xl ${isDark ? 'border-white/20 bg-white/5' : 'border-black/20 bg-black/5'}`}>
+                       <LayoutGrid size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
+                       <h3 className="text-3xl font-black tracking-tight mb-2">A pristine canvas.</h3>
+                       <p className={`text-base font-medium ${theme.textMuted}`}>Drop a file anywhere, or press `Ctrl+V`.</p>
+                     </div>
+                  </div>
+                  
+               ) : nav.viewMode === 'list' ? (
+                  <div className="flex flex-col gap-4 pb-10 pointer-events-auto">
+                     <AnimatePresence>
+                        {filteredData.map((item, index) => (
+                            <motion.div 
+                                key={item.id} 
+                                id={`card-${item.id}`}
+                                layout 
+                                variants={cardVariants} 
+                                initial="hidden" 
+                                animate="visible" 
+                                exit="exit" 
+                                className="lasso-selectable"
+                                data-id={item.id}
+                            >
+                               <MemoizedMasonryCard 
+                                   customFolders={customFolders} 
+                                   customLists={customLists} 
+                                   onMoveToFolder={moveItemToFolder} 
+                                   onMoveToList={moveItemToList} 
+                                   onUpdateTags={updateItemTags} 
+                                   onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
+                                   viewMode={nav.viewMode} 
+                                   item={item} 
+                                   theme={theme} 
+                                   isDark={isDark} 
+                                   inTrash={nav.categoryType === 'trash'} 
+                                   activeWorkspace={nav.workspace} 
+                                   currentUserId={session?.user?.id} 
+                                   teamRole={teamRole} 
+                                   teamMembers={teamMembers} 
+                                   onRestore={restoreFromTrash} 
+                                   onHardDelete={hardDelete} 
+                                   onDelete={moveToTrash} 
+                                   onUpdateSticky={updateStickyNote} 
+                                   toggleItemReaction={toggleItemReaction} 
+                                   toggleChecklistItem={toggleChecklistItem} 
+                                   isSelected={selectedItems.has(item.id)} 
+                                   onToggleSelect={handleToggleSelect} 
+                                   isSelectMode={isSelectMode} 
+                                   isActiveKeyboard={activeIndex === index} 
+                                   onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
+                                   onClick={(e: any) => handleOpenItem(item)} 
+                               />
+                            </motion.div>
+                        ))}
+                     </AnimatePresence>
+                  </div>
+
+               ) : nav.viewMode === 'card' || nav.viewMode === 'grid' ? (
+                 <div className={`${nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"} pointer-events-auto`}>
+                   <AnimatePresence>
+                     {filteredData.map((item, index) => (
+                          <motion.div 
+                              key={item.id} 
+                              id={`card-${item.id}`}
+                              layout 
+                              variants={cardVariants} 
+                              initial="hidden" 
+                              animate="visible" 
+                              exit="exit" 
+                              className={`${nav.viewMode === 'grid' ? "break-inside-avoid inline-block w-full mb-6 relative" : "h-full relative"} lasso-selectable`} 
+                              data-id={item.id}
+                          >
+                             <MemoizedMasonryCard 
+                                 customFolders={customFolders} 
+                                 customLists={customLists} 
+                                 onMoveToFolder={moveItemToFolder} 
+                                 onMoveToList={moveItemToList} 
+                                 onUpdateTags={updateItemTags} 
+                                 onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
+                                 viewMode={nav.viewMode} 
+                                 item={item} 
+                                 theme={theme} 
+                                 isDark={isDark} 
+                                 inTrash={nav.categoryType === 'trash'} 
+                                 activeWorkspace={nav.workspace} 
+                                 currentUserId={session?.user?.id} 
+                                 teamRole={teamRole} 
+                                 teamMembers={teamMembers} 
+                                 onRestore={restoreFromTrash} 
+                                 onHardDelete={hardDelete} 
+                                 onDelete={moveToTrash} 
+                                 onUpdateSticky={updateStickyNote} 
+                                 toggleItemReaction={toggleItemReaction} 
+                                 toggleChecklistItem={toggleChecklistItem} 
+                                 isSelected={selectedItems.has(item.id)} 
+                                 onToggleSelect={handleToggleSelect} 
+                                 isSelectMode={isSelectMode} 
+                                 isActiveKeyboard={activeIndex === index} 
+                                 onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
+                                 onClick={(e: any) => handleOpenItem(item)} 
+                             />
+                          </motion.div>
+                     ))}
+                   </AnimatePresence>
+                 </div>
+
+               ) : (
+                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={modalSpring} className={`w-full overflow-hidden flex flex-col shadow-2xl border mb-10 rounded-3xl ${isDark ? 'bg-[#0E0E12] border-white/5' : 'bg-white border-black/5'} pointer-events-auto`}>
+                    <div className={`grid grid-cols-7 border-b shrink-0 ${isDark ? 'border-white/5 bg-white/5' : 'border-black/5 bg-black/5'}`}>
+                       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                          <div key={day} className={`p-3 md:p-5 text-center text-[10px] md:text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{day.slice(0, 3)}</div>
+                       ))}
+                    </div>
+                    <div className={`grid grid-cols-7 auto-rows-fr gap-px ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
+                       {calendarDays.map((day, idx) => {
+                          const dayItems = filteredData.filter(item => {
+                              const targetDate = item.scheduled_for ? new Date(item.scheduled_for) : new Date(item.created_at || new Date());
+                              return isSameDay(targetDate, day);
+                          });
+                          const isCurrentMonth = isSameMonth(day, monthStart);
+                          const isToday = isSameDay(day, new Date());
+
+                          return (
+                            <div key={day.toString()} className={`min-h-24 md:min-h-35 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? 'bg-[#0A0A0C]' : 'bg-white') : (isDark ? 'bg-[#0A0A0C]/50 opacity-40' : 'bg-[#faf8f5] opacity-50')}`}>
+                               <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 md:h-10 flex items-center justify-center shrink-0 rounded-full ${isToday ? 'bg-teal-500 text-white shadow-lg shadow-teal-900/20' : theme.textMuted}`}>{format(day, 'd')}</div>
+                               <div className="flex-1 flex flex-col gap-1 md:gap-2 overflow-y-auto custom-scrollbar pr-1">
+                                  {dayItems.map(item => {
+                                     const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+                                     const isYouTube = !!ytMatch;
+                                     const youtubeId = isYouTube ? ytMatch[1] : null;
+
+                                     const isVideo = item.url && (item.url.includes('instagram.com') || isYouTube);
+                                     const chipColor = isVideo 
+                                        ? (isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200') 
+                                        : item.type === 'note' 
+                                        ? (isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-100 text-emerald-700 border-emerald-200')
+                                        : (isDark ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-blue-100 text-blue-700 border-blue-200');
+                                     const Icon = isVideo ? Play : item.type === 'note' ? FileText : Globe;
+                                     
+                                     return (
+                                        <button 
+                                           key={item.id} 
+                                           onClick={() => handleOpenItem(item)}
+                                           className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 text-[10px] md:text-xs font-bold border cursor-pointer shadow-sm truncate hover:scale-105 active:scale-95 transition-all rounded-xl ${chipColor}`}
+                                        >
+                                           <Icon size={12} strokeWidth={2} className="shrink-0 md:w-3.5 md:h-3.5" />
+                                           <span className="truncate">{item.title || "Untitled"}</span>
+                                        </button>
+                                     )
+                                  })}
+                               </div>
+                            </div>
+                          )
+                       })}
+                    </div>
+                 </motion.div>
+               )}
+
+               {hasMore && !isLoading && !debouncedSearchQuery && !isSelectMode && (
+                   <div className="w-full flex justify-center mt-12 mb-10 pointer-events-auto">
+                      <button onClick={() => { setPage(p => p+1); fetchItems(page + 1, true); }} className={`px-8 py-3 font-bold text-sm transition-all active:scale-95 border shadow-md rounded-full ${isDark ? 'bg-zinc-800 border-white/5 text-white hover:bg-zinc-700' : 'bg-white border-black/5 text-[#2d2a26] hover:bg-black/5'}`}>
+                          Load More Content
+                      </button>
                    </div>
-                ))}
-             </div>
-          ) : filteredData.length === 0 && (nav.viewMode === 'grid' || nav.viewMode === 'card') ? (
-             <div className="flex-1 w-full flex flex-col items-center mt-20 text-center opacity-50 px-4">
-                <div className={`w-full max-w-lg border border-dashed rounded-3xl p-16 flex flex-col items-center justify-center transition-colors shadow-sm ${isDark ? 'border-white/20 bg-white/5' : 'border-black/20 bg-black/5'}`}>
-                  <LayoutGrid size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
-                  <h3 className="text-3xl font-black tracking-tight mb-2">A pristine canvas.</h3>
-                  <p className={`text-base font-medium ${theme.textMuted}`}>Drop a file anywhere, or press `Ctrl+V`.</p>
-                </div>
-             </div>
-             
-          ) : nav.viewMode === 'list' ? (
-             <div className="flex flex-col gap-4 pb-10">
-                <AnimatePresence>
-                   {filteredData.map((item, index) => (
-                       <motion.div 
-                           key={item.id} 
-                           id={`card-${item.id}`}
-                           layout 
-                           variants={cardVariants} 
-                           initial="hidden" 
-                           animate="visible" 
-                           exit="exit" 
-                           className="lasso-selectable" 
-                           data-id={item.id}
-                       >
-                          <MemoizedMasonryCard 
-                              customFolders={customFolders} 
-                              customLists={customLists} 
-                              onMoveToFolder={moveItemToFolder} 
-                              onMoveToList={moveItemToList} 
-                              onUpdateTags={updateItemTags} 
-                              onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
-                              viewMode={nav.viewMode} 
-                              item={item} 
-                              theme={theme} 
-                              isDark={isDark} 
-                              inTrash={nav.categoryType === 'trash'} 
-                              activeWorkspace={nav.workspace} 
-                              currentUserId={session?.user?.id} 
-                              teamRole={teamRole} 
-                              teamMembers={teamMembers} 
-                              onRestore={restoreFromTrash} 
-                              onHardDelete={hardDelete} 
-                              onDelete={moveToTrash} 
-                              onUpdateSticky={updateStickyNote} 
-                              toggleItemReaction={toggleItemReaction} 
-                              toggleChecklistItem={toggleChecklistItem} 
-                              isSelected={selectedItems.has(item.id)} 
-                              onToggleSelect={handleToggleSelect} 
-                              isSelectMode={isSelectMode} 
-                              isActiveKeyboard={activeIndex === index} 
-                              onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
-                              onClick={(e: any) => handleOpenItem(item)} 
-                          />
-                       </motion.div>
-                   ))}
-                </AnimatePresence>
-             </div>
-
-          ) : nav.viewMode === 'card' || nav.viewMode === 'grid' ? (
-            <div className={nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"}>
-              <AnimatePresence>
-                {filteredData.map((item, index) => (
-                     <motion.div 
-                         key={item.id} 
-                         id={`card-${item.id}`}
-                         layout 
-                         variants={cardVariants} 
-                         initial="hidden" 
-                         animate="visible" 
-                         exit="exit" 
-                         className={`${nav.viewMode === 'grid' ? "break-inside-avoid relative" : "h-full relative"} lasso-selectable`} 
-                         data-id={item.id}
-                     >
-                        <MemoizedMasonryCard 
-                            customFolders={customFolders} 
-                            customLists={customLists} 
-                            onMoveToFolder={moveItemToFolder} 
-                            onMoveToList={moveItemToList} 
-                            onUpdateTags={updateItemTags} 
-                            onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
-                            viewMode={nav.viewMode} 
-                            item={item} 
-                            theme={theme} 
-                            isDark={isDark} 
-                            inTrash={nav.categoryType === 'trash'} 
-                            activeWorkspace={nav.workspace} 
-                            currentUserId={session?.user?.id} 
-                            teamRole={teamRole} 
-                            teamMembers={teamMembers} 
-                            onRestore={restoreFromTrash} 
-                            onHardDelete={hardDelete} 
-                            onDelete={moveToTrash} 
-                            onUpdateSticky={updateStickyNote} 
-                            toggleItemReaction={toggleItemReaction} 
-                            toggleChecklistItem={toggleChecklistItem} 
-                            isSelected={selectedItems.has(item.id)} 
-                            onToggleSelect={handleToggleSelect} 
-                            isSelectMode={isSelectMode} 
-                            isActiveKeyboard={activeIndex === index} 
-                            onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
-                            onClick={(e: any) => handleOpenItem(item)} 
-                        />
-                     </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-
-          ) : (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={modalSpring} className={`w-full rounded-3xl overflow-hidden flex flex-col shadow-2xl border mb-10 ${isDark ? 'bg-[#0E0E12] border-white/5' : 'bg-white border-black/5'}`}>
-               <div className={`grid grid-cols-7 border-b shrink-0 ${isDark ? 'border-white/5 bg-white/5' : 'border-black/5 bg-black/5'}`}>
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                     <div key={day} className={`p-3 md:p-5 text-center text-[10px] md:text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{day.slice(0, 3)}</div>
-                  ))}
-               </div>
-               <div className={`grid grid-cols-7 auto-rows-fr gap-px ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
-                  {calendarDays.map((day, idx) => {
-                     const dayItems = filteredData.filter(item => {
-                         const targetDate = item.scheduled_for ? new Date(item.scheduled_for) : new Date(item.created_at || new Date());
-                         return isSameDay(targetDate, day);
-                     });
-                     const isCurrentMonth = isSameMonth(day, monthStart);
-                     const isToday = isSameDay(day, new Date());
-
-                     return (
-                       <div key={day.toString()} className={`min-h-24 md:min-h-35 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? 'bg-[#0A0A0C]' : 'bg-white') : (isDark ? 'bg-[#0A0A0C]/50 opacity-40' : 'bg-[#faf8f5] opacity-50')}`}>
-                          <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 md:h-10 flex items-center justify-center rounded-full shrink-0 ${isToday ? 'bg-teal-500 text-white shadow-lg shadow-teal-900/20' : theme.textMuted}`}>{format(day, 'd')}</div>
-                          <div className="flex-1 flex flex-col gap-1 md:gap-2 overflow-y-auto custom-scrollbar pr-1">
-                             {dayItems.map(item => {
-                                const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-                                const isYouTube = !!ytMatch;
-                                const youtubeId = isYouTube ? ytMatch[1] : null;
-
-                                const isVideo = item.url && (item.url.includes('instagram.com') || isYouTube);
-                                const chipColor = isVideo 
-                                   ? (isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200') 
-                                   : item.type === 'note' 
-                                   ? (isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-100 text-emerald-700 border-emerald-200')
-                                   : (isDark ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-blue-100 text-blue-700 border-blue-200');
-                                const Icon = isVideo ? Play : item.type === 'note' ? FileText : Globe;
-                                
-                                return (
-                                   <button 
-                                      key={item.id} 
-                                      onClick={() => handleOpenItem(item)}
-                                      className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-xs font-bold border cursor-pointer shadow-sm truncate hover:scale-105 active:scale-95 transition-all ${chipColor}`}
-                                   >
-                                      <Icon size={12} strokeWidth={2} className="shrink-0 md:w-3.5 md:h-3.5" />
-                                      <span className="truncate">{item.title || "Untitled"}</span>
-                                   </button>
-                                )
-                             })}
-                          </div>
-                       </div>
-                     )
-                  })}
-               </div>
-            </motion.div>
-          )}
-
-          {hasMore && !isLoading && !debouncedSearchQuery && !isSelectMode && (
-              <div className="w-full flex justify-center mt-12 mb-10">
-                 <button onClick={() => { setPage(p => p+1); fetchItems(page + 1, true); }} className={`px-8 py-3 rounded-full font-bold text-sm transition-all active:scale-95 border shadow-md ${isDark ? 'bg-zinc-800 border-white/5 text-white hover:bg-zinc-700' : 'bg-white border-black/5 text-[#2d2a26] hover:bg-black/5'}`}>
-                     Load More Content
-                 </button>
-              </div>
-          )}
-          {isLoading && page > 1 && (<div className="w-full flex justify-center mt-12 mb-10"><Loader2 size={24} className={`animate-spin ${theme.textMuted}`} /></div>)}
-
-        </div>
+               )}
+               {isLoading && page > 1 && (<div className="w-full flex justify-center mt-12 mb-10"><Loader2 size={24} className={`animate-spin ${theme.textMuted}`} /></div>)}
+           </div>
+         </div>
       </main>
       
       <TeamChatDrawer 
