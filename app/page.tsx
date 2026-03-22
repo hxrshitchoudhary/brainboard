@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback, useRef, startTransition } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Inter } from "next/font/google";
-import { Toaster, toast as sonnerToast } from "sonner";
-import { Command } from "cmdk";
-import { supabase } from "@/lib/supabase"; 
-import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow } from "date-fns";
+import { Inter } from 'next/font/google';
+import { Toaster, toast as sonnerToast } from 'sonner';
+import { Command } from 'cmdk';
+import { supabase } from '@/lib/supabase'; 
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow } from 'date-fns';
 
 // --- ICONS ---
 import { 
@@ -40,17 +40,11 @@ import { NoteEditorModal } from "@/components/modals/NoteEditorModal";
 import { TeamChatDrawer } from "@/components/chat/TeamChatDrawer";
 import { MemoizedMasonryCard } from "@/components/board/MemoizedMasonryCard";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] });
 
-// AST-Safe CSS Injection
-const INJECTED_CSS = `
-  .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.1); border-radius: 10px; transition: all 0.3s; }
-  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.3); }
-  @keyframes shimmer { 100% { transform: translateX(100%); } }
-  .animate-shimmer { animation: shimmer 2s infinite linear; }
-`;
+// Safe constants to prevent Turbopack parsing errors
+const NOISE_BG = "url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZmlsdGVyIGlkPSJub2lzZUZpbHRlciI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iNCIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZUZpbHRlcikiLz48L3N2Zz4=')";
+const INJECTED_CSS = ".custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.1); border-radius: 10px; transition: all 0.3s; } .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.3); } @keyframes shimmer { 100% { transform: translateX(100%); } } .animate-shimmer { animation: shimmer 2s infinite linear; }";
 
 export default function BrainboardBalanced() {
   const [session, setSession] = useState<any>(null);
@@ -402,9 +396,8 @@ export default function BrainboardBalanced() {
     if (typeof window !== "undefined") {
         localStorage.setItem("brainboard-theme", nextTheme ? "dark" : "light");
     }
-    startTransition(() => {
-        setIsDark(nextTheme);
-    });
+    // Set synchronously without startTransition to prevent React yielding frames and visual tearing
+    setIsDark(nextTheme);
   };
 
   const theme = {
@@ -447,7 +440,7 @@ export default function BrainboardBalanced() {
                 id: user.id, 
                 display_name: dName, 
                 username: uName, 
-                avatar_url: user.user_metadata?.avatar_url || ("https://api.dicebear.com/9.x/shapes/svg?seed=" + user.email), 
+                avatar_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${user.email}`, 
                 updated_at: new Date().toISOString() 
             }, { onConflict: "id" }); 
         } catch(e) {}
@@ -493,7 +486,7 @@ export default function BrainboardBalanced() {
     if (cleanUsername.startsWith("@")) {
         cleanUsername = cleanUsername.substring(1);
     }
-    cleanUsername = cleanUsername.split("").filter((c: string) => (c >= "a" && c <= "z") || (c >= "0" && c <= "9") || c === "_").join("");
+    cleanUsername = cleanUsername.split("").filter(c => (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c === '_').join("");
 
     if (!cleanUsername || !profile.displayName.trim()) {
        updateProfile({ error: "Name and Username are required.", isSaving: false });
@@ -561,7 +554,7 @@ export default function BrainboardBalanced() {
     const file = e.target.files?.[0];
     if (!file || !session?.user?.id) return;
     updateUi({ isUploading: true });
-    const fileName = "avatar-" + session.user.id + "-" + Date.now() + "." + file.name.split(".").pop();
+    const fileName = `avatar-${session.user.id}-${Date.now()}.${file.name.split(".").pop()}`;
     try {
        await supabase.storage.from("media").upload(fileName, file);
        const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(fileName);
@@ -609,7 +602,7 @@ export default function BrainboardBalanced() {
     
     const lastAtIdx = textBeforeCursor.lastIndexOf("@");
     const textWithoutQuery = lastAtIdx !== -1 ? textBeforeCursor.substring(0, lastAtIdx) : textBeforeCursor;
-    const newText = textWithoutQuery + "@" + name.split(" ").join("") + " " + textAfterCursor;
+    const newText = textWithoutQuery + `@${name.split(" ").join("")} ` + textAfterCursor;
     
     setChatInput(newText);
     setMentionQuery({ active: false, query: "", target: "chat" });
@@ -618,8 +611,7 @@ export default function BrainboardBalanced() {
 
   const handleSendChatMessage = async () => {
     if (!chatInput.trim() || !session?.user?.id) return;
-    const defaultAvatar = "https://api.dicebear.com/9.x/shapes/svg?seed=" + (session?.user?.email || "default");
-    const currentAvatar = session?.user?.user_metadata?.avatar_url || defaultAvatar;
+    const currentAvatar = session?.user?.user_metadata?.avatar_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${session?.user?.email || "default"}`;
     const payload = {
        workspace_id: teamWorkspaceId,
        user_id: session.user.id,
@@ -651,7 +643,7 @@ export default function BrainboardBalanced() {
   const handleNewNote = () => {
     if (!session?.user?.id) return;
     const newItem: BentoItem = {
-      id: "temp-" + Date.now(), 
+      id: `temp-${Date.now()}`, 
       user_id: session.user.id, 
       workspace_id: nav.workspace === "team" ? teamWorkspaceId : undefined,
       creator: profile.displayName, 
@@ -668,7 +660,7 @@ export default function BrainboardBalanced() {
   const handleNewChecklist = () => {
     if (!session?.user?.id) return;
     const newItem: BentoItem = {
-      id: "temp-" + Date.now(), 
+      id: `temp-${Date.now()}`, 
       user_id: session.user.id, 
       workspace_id: nav.workspace === "team" ? teamWorkspaceId : undefined,
       creator: profile.displayName, 
@@ -838,7 +830,7 @@ export default function BrainboardBalanced() {
          updateUi({ isAILoading: true });
          showToast(isReel ? "Capturing Reel..." : isYouTube ? "Capturing YouTube..." : "Capturing link...");
          
-         const tempId = "temp-" + Date.now();
+         const tempId = `temp-${Date.now()}`;
          let newItem: BentoItem = {
              id: tempId, 
              user_id: session.user.id, 
@@ -869,20 +861,20 @@ export default function BrainboardBalanced() {
 
              if (isYouTube && youtubeId) {
                  try {
-                     const ytRes = await fetch("/api/microlink?url=" + encodeURIComponent(text));
+                     const ytRes = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(text)}`);
                      if (ytRes.ok) {
                          const ytData = await ytRes.json();
                          fetchedTitle = ytData.title || "YouTube Video";
                          fetchedDescription = ytData.author_name || null; 
-                         fetchedThumbnail = ytData.thumbnail_url || ("https://i.ytimg.com/vi/" + youtubeId + "/hqdefault.jpg");
+                         fetchedThumbnail = ytData.thumbnail_url || `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`;
                      } else { 
-                         fetchedThumbnail = "https://i.ytimg.com/vi/" + youtubeId + "/hqdefault.jpg"; 
+                         fetchedThumbnail = `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`; 
                      }
                  } catch (ytErr) { 
-                     fetchedThumbnail = "https://i.ytimg.com/vi/" + youtubeId + "/hqdefault.jpg"; 
+                     fetchedThumbnail = `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`; 
                  }
              } else {
-                 const res = await fetch("/api/microlink?url=" + encodeURIComponent(text));
+                 const res = await fetch(`/api/microlink?url=${encodeURIComponent(text)}`);
                  const data = await res.json();
                  const info = data.data || data; 
                  fetchedTitle = info.title || fetchedTitle;
@@ -927,7 +919,7 @@ export default function BrainboardBalanced() {
                  url: text, 
                  title: "Saved Link", 
                  sections: newItem.sections,
-                 thumbnail_url: isYouTube && youtubeId ? ("https://i.ytimg.com/vi/" + youtubeId + "/hqdefault.jpg") : null
+                 thumbnail_url: isYouTube && youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null
              };
              const { data: dbData } = await supabase.from("assets").insert([fallbackPayload]).select().single();
              if (dbData) {
@@ -950,16 +942,15 @@ export default function BrainboardBalanced() {
   const endDate = endOfWeek(monthEnd);
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
 
-  const defaultAvatarFallback = "https://api.dicebear.com/9.x/shapes/svg?seed=" + (session?.user?.email || "default");
-  const currentAvatar = session?.user?.user_metadata?.avatar_url || defaultAvatarFallback;
+  const currentAvatar = session?.user?.user_metadata?.avatar_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${session?.user?.email || "default"}`;
   const userDisplayName = cleanName(session?.user?.user_metadata?.display_name || session?.user?.email);
-  const userHandle = session?.user?.user_metadata?.username ? ("@" + session.user.user_metadata.username) : cleanName(session?.user?.email);
+  const userHandle = session?.user?.user_metadata?.username ? `@${session.user.user_metadata.username}` : cleanName(session?.user?.email);
 
   const getCategoryTitle = () => {
     if (nav.categoryType === "trash") return "Trash";
     if (nav.categoryType === "pinned") return "Pinned";
     if ((nav.categoryType as any) === "hashtags") return "Hashtags";
-    if (nav.categoryType === "tag") return "#" + nav.category;
+    if (nav.categoryType === "tag") return `#${nav.category}`;
     if (nav.category === "All") return "Everything";
     return nav.category.charAt(0).toUpperCase() + nav.category.slice(1);
   };
@@ -974,7 +965,7 @@ export default function BrainboardBalanced() {
 
   if (!session) {
       return (
-        <div className={"relative h-screen w-full bg-[#000000] text-white overflow-hidden selection:bg-teal-500/30 flex flex-col items-center justify-center " + inter.className}>
+        <div className={`relative h-screen w-full bg-[#000000] text-white overflow-hidden selection:bg-teal-500/30 flex flex-col items-center justify-center ${inter.className}`}>
           <nav className="absolute top-0 w-full flex justify-between items-center px-6 md:px-12 py-8 z-50">
             <div className="font-bold text-xl md:text-2xl tracking-tighter flex items-center gap-3 drop-shadow-lg">
               <div className="w-8 h-8 md:w-10 md:h-10 bg-white/5 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 shadow-xl">
@@ -1004,7 +995,7 @@ export default function BrainboardBalanced() {
                 whileHover={bounceHover} 
                 whileTap={bounceTap} 
                 onClick={handleGoogleLogin} 
-                className="group bg-white text-black text-base md:text-lg font-black px-10 py-4 md:px-12 md:py-5 rounded-[3rem] transition-all flex items-center gap-3 shadow-[0_0_60px_rgba(20,184,166,0.4)] hover:shadow-[0_0_80px_rgba(20,184,166,0.6)]"
+                className={`group bg-white text-black text-base md:text-lg font-black px-10 py-4 md:px-12 md:py-5 rounded-[3rem] transition-all flex items-center gap-3 shadow-[0_0_60px_rgba(20,184,166,0.4)] hover:shadow-[0_0_80px_rgba(20,184,166,0.6)]`}
             >
                 Authenticate Securely <ChevronRight className="group-hover:translate-x-1 transition-transform" />
             </motion.button>
@@ -1014,11 +1005,9 @@ export default function BrainboardBalanced() {
   }
 
   return (
-    <div className={`flex h-screen w-full p-0 md:p-3 lg:p-4 gap-4 relative transition-colors duration-700 overflow-hidden ${theme.bg} ${theme.text} selection:bg-teal-500/30 ${inter.className}`}>
+    <div className={`flex h-screen w-full p-0 md:p-3 lg:p-4 gap-4 relative overflow-hidden ${theme.bg} ${theme.text} selection:bg-teal-500/30 ${inter.className}`}>
       
-      <style dangerouslySetInnerHTML={{__html: INJECTED_CSS}} />
-
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-[0.02] mix-blend-overlay bg-stone-500" />
+      <div className="fixed inset-0 z-0 pointer-events-none opacity-[0.02] mix-blend-overlay" style={{ backgroundImage: NOISE_BG }}></div>
 
       <Toaster theme={isDark ? "dark" : "light"} position="bottom-right" style={{ zIndex: 99999 }} />
       
@@ -1164,13 +1153,13 @@ export default function BrainboardBalanced() {
                  className="w-full max-w-6xl aspect-video rounded-3xl overflow-hidden shadow-2xl bg-black border border-white/10" 
                  onClick={e => e.stopPropagation()}
              >
-                <iframe src={"https://www.youtube.com/embed/" + playingYouTubeId + "?autoplay=1&rel=0"} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                <iframe src={`https://www.youtube.com/embed/${playingYouTubeId}?autoplay=1&rel=0`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
              </motion.div>
            </motion.div>
         )}
       </AnimatePresence>
 
-      <aside className={`hidden md:flex w-64 h-full shrink-0 flex-col relative z-50 transition-colors duration-700 rounded-3xl border shadow-xl ${theme.island}`}>
+      <aside className={`hidden md:flex w-64 h-full shrink-0 flex-col relative z-50 rounded-3xl border shadow-xl ${theme.island}`}>
          <div className="p-6 pb-2 pt-8 flex justify-between items-center">
              <h1 className="font-bold text-2xl tracking-tighter flex items-center gap-2 drop-shadow-sm">
               <Sparkles className="text-teal-500" size={22} strokeWidth={1.5} /> brainboard
@@ -1208,7 +1197,7 @@ export default function BrainboardBalanced() {
                <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} px-3 mb-2 opacity-70`}>Content</h4>
                <div className="space-y-0.5">
                  <SidebarItem icon={<FileText size={16} strokeWidth={1.5}/>} label="Notes" active={nav.categoryType === "type" && nav.category === "notes"} onClick={() => updateNav({ categoryType: "type", category: "notes" })} theme={theme} isDark={isDark} />
-                 <SidebarItem icon={<Globe size={16} strokeWidth={1.5}/>} label="Links" active={nav.categoryType === "type" && nav.category === "links"} onClick={() => updateNav({ categoryType: "type", category: "links" })} theme={theme} isDark={isDark} />
+                 <SidebarItem icon={<Globe size={16} strokeWidth={1.5}/>} label="Links &amp; Docs" active={nav.categoryType === "type" && nav.category === "links"} onClick={() => updateNav({ categoryType: "type", category: "links" })} theme={theme} isDark={isDark} />
                  <SidebarItem icon={<ImageIcon size={16} strokeWidth={1.5}/>} label="Media" active={nav.categoryType === "type" && nav.category === "media"} onClick={() => updateNav({ categoryType: "type", category: "media" })} theme={theme} isDark={isDark} />
                  <SidebarItem icon={<Hash size={16} strokeWidth={1.5}/>} label="Hashtags" active={(nav.categoryType as any) === "hashtags" || nav.categoryType === "tag"} onClick={() => updateNav({ categoryType: "hashtags" as any, category: "All" })} theme={theme} isDark={isDark} />
                </div>
@@ -1547,7 +1536,7 @@ export default function BrainboardBalanced() {
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => updateUi({ showTeamPresence: false })} />
                               <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-80 z-50 shadow-2xl border backdrop-blur-3xl flex flex-col overflow-hidden rounded-3xl ${isDark ? "bg-zinc-900/95 border-zinc-800" : "bg-white/95 border-[#e8e4dc]"}`}>
-                                 <div className="flex flex-col gap-1 max-h-80 overflow-y-auto custom-scrollbar p-2">
+                                 <div className="flex flex-col gap-1 max-h-80 overflow-y-auto p-2">
                                     
                                     <div className="px-3 pt-3 pb-2">
                                        <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted}`}>Online Now</h4>
@@ -1690,7 +1679,7 @@ export default function BrainboardBalanced() {
            </AnimatePresence>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 md:px-12 pb-24 md:pb-20 custom-scrollbar relative z-10 w-full">
+        <div className="flex-1 overflow-y-auto px-6 md:px-12 pt-6 pb-24 md:pb-20 custom-scrollbar relative z-10 w-full">
            
            <div className="absolute inset-0 z-0 cursor-crosshair" style={{ minHeight: "200vh" }} onPointerDown={handlePointerDown} />
            
@@ -1708,7 +1697,7 @@ export default function BrainboardBalanced() {
                      <div className={`w-full max-w-lg border border-dashed p-16 flex flex-col items-center justify-center transition-colors shadow-sm rounded-3xl ${isDark ? "border-white/20 bg-white/5" : "border-black/20 bg-black/5"}`}>
                        <LayoutGrid size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
                        <h3 className="text-3xl font-black tracking-tight mb-2">A pristine canvas.</h3>
-                       <p className={`text-base font-medium ${theme.textMuted}`}>Drop a file anywhere, or press <kbd>Ctrl+V</kbd>.</p>
+                       <p className={`text-base font-medium ${theme.textMuted}`}>Drop a file anywhere, or press &quot;Ctrl+V&quot;.</p>
                      </div>
                   </div>
                   
@@ -1724,7 +1713,7 @@ export default function BrainboardBalanced() {
                                 initial="hidden" 
                                 animate="visible" 
                                 exit="exit" 
-                                className="lasso-selectable"
+                                className="lasso-selectable relative z-0 hover:z-50"
                                 data-id={item.id}
                             >
                                <MemoizedMasonryCard 
@@ -1773,7 +1762,7 @@ export default function BrainboardBalanced() {
                               initial="hidden" 
                               animate="visible" 
                               exit="exit" 
-                              className={`${nav.viewMode === "grid" ? "break-inside-avoid inline-block w-full mb-6 relative" : "h-full relative"} lasso-selectable`} 
+                              className={`${nav.viewMode === "grid" ? "break-inside-avoid inline-block w-full mb-6 relative" : "h-full relative"} lasso-selectable z-0 hover:z-50`} 
                               data-id={item.id}
                           >
                              <MemoizedMasonryCard 
