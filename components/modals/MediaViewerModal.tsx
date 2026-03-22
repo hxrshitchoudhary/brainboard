@@ -58,6 +58,7 @@ export const MediaViewerModal = ({ media, updateMedia, closeMediaViewer, items }
   const handleDragEnd = (e: any, info: any) => {
     if (zoom > 1) return; // Do not close or navigate if zoomed in
 
+    // Flick to close or swipe to navigate only at 100% zoom
     if (Math.abs(info.offset.y) > 120 || Math.abs(info.velocity.y) > 500) {
       closeMediaViewer();
     } else if (info.offset.x > 100 && currentIndex > 0) {
@@ -96,27 +97,26 @@ export const MediaViewerModal = ({ media, updateMedia, closeMediaViewer, items }
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          // Completely stripped of outlines and borders
-          className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/95 backdrop-blur-3xl touch-none outline-none border-none ring-0"
+          className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/95 backdrop-blur-3xl touch-none"
           onClick={closeMediaViewer}
           onWheel={handleWheel}
         >
           {/* Top Bar Navigation */}
-          <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-center z-50 pointer-events-none">
-            <div className="text-white/70 text-sm font-bold tracking-widest uppercase bg-black/20 px-4 py-2 rounded-full backdrop-blur-md border border-white/5">
+          <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-center z-50 bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+            <div className="text-white/70 text-sm font-bold tracking-widest uppercase">
               {currentIndex >= 0 ? `${currentIndex + 1} / ${mediaItems.length}` : 'Media View'}
             </div>
             <div className="flex items-center gap-3 pointer-events-auto">
-              <button onClick={handleDownload} className="p-3 rounded-full bg-black/40 hover:bg-white/10 border border-white/10 text-white transition-colors backdrop-blur-xl" title="Download Media">
+              <button onClick={handleDownload} className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors backdrop-blur-xl" title="Download Media">
                 <Download size={20} />
               </button>
               {media.item.url && (
-                <a href={media.item.url} target="_blank" rel="noreferrer" className="p-3 rounded-full bg-black/40 hover:bg-white/10 border border-white/10 text-white transition-colors backdrop-blur-xl" onClick={e => e.stopPropagation()} title="Open Original">
+                <a href={media.item.url} target="_blank" rel="noreferrer" className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors backdrop-blur-xl" onClick={e => e.stopPropagation()} title="Open Original">
                   <ExternalLink size={20} />
                 </a>
               )}
               <div className="w-px h-6 bg-white/20 mx-1" />
-              <button onClick={closeMediaViewer} className="p-3 rounded-full bg-black/40 hover:bg-white/10 border border-white/10 text-white transition-colors backdrop-blur-xl">
+              <button onClick={closeMediaViewer} className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors backdrop-blur-xl">
                 <X size={20} />
               </button>
             </div>
@@ -124,22 +124,26 @@ export const MediaViewerModal = ({ media, updateMedia, closeMediaViewer, items }
 
           {/* Side Nav Arrows */}
           {currentIndex > 0 && zoom === 1 && (
-            <button onClick={(e) => { e.stopPropagation(); navigate(-1); }} className="absolute left-6 top-1/2 -translate-y-1/2 p-4 rounded-full bg-black/40 border border-white/10 hover:bg-white/10 text-white transition-colors z-50 backdrop-blur-xl hidden md:block outline-none">
+            <button onClick={(e) => { e.stopPropagation(); navigate(-1); }} className="absolute left-6 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/5 hover:bg-white/20 text-white transition-colors z-50 backdrop-blur-xl hidden md:block">
               <ChevronLeft size={28} />
             </button>
           )}
           {currentIndex < mediaItems.length - 1 && zoom === 1 && (
-            <button onClick={(e) => { e.stopPropagation(); navigate(1); }} className="absolute right-6 top-1/2 -translate-y-1/2 p-4 rounded-full bg-black/40 border border-white/10 hover:bg-white/10 text-white transition-colors z-50 backdrop-blur-xl hidden md:block outline-none">
+            <button onClick={(e) => { e.stopPropagation(); navigate(1); }} className="absolute right-6 top-1/2 -translate-y-1/2 p-4 rounded-full bg-white/5 hover:bg-white/20 text-white transition-colors z-50 backdrop-blur-xl hidden md:block">
               <ChevronRight size={28} />
             </button>
           )}
 
-          {/* The Media Canvas - CRITICAL FIX: Added outline-none and focus-visible:outline-none */}
-          <div className="w-full h-full flex items-center justify-center p-4 md:p-24 overflow-hidden outline-none">
+          {/* The Media Canvas */}
+          <div className="w-full h-full flex items-center justify-center p-4 md:p-24 overflow-hidden">
             <motion.div
               drag
+              // BALANCED PHYSICS: 
+              // 1. Lock bounds when zoom is 1. When > 1, let them pan freely.
               dragConstraints={zoom === 1 ? { left: 0, right: 0, top: 0, bottom: 0 } : undefined}
+              // 2. Kill elasticity when zoomed in for instant 1:1 pixel mouse tracking
               dragElastic={zoom === 1 ? 0.8 : 0}
+              // 3. Kill momentum when zoomed so the image doesn't "slide away" like ice when you let go of the mouse
               dragMomentum={zoom === 1 ? true : false}
               onDragEnd={handleDragEnd}
               onClick={e => e.stopPropagation()}
@@ -149,28 +153,27 @@ export const MediaViewerModal = ({ media, updateMedia, closeMediaViewer, items }
                   x: zoom === 1 ? 0 : undefined, 
                   y: zoom === 1 ? 0 : undefined 
               }}
+              // 4. Snappier, tighter spring so zoom adjustments feel instant, not floaty
               transition={{ type: "spring", stiffness: 450, damping: 35 }}
-              className={`relative flex items-center justify-center outline-none focus:outline-none focus-visible:outline-none border-none ring-0 ${zoom > 1 ? 'cursor-move' : 'cursor-grab active:cursor-grabbing'}`}
+              className={`relative flex items-center justify-center ${zoom > 1 ? 'cursor-move' : 'cursor-grab active:cursor-grabbing'}`}
             >
               {media.item.type === 'video' && media.item.url ? (
-                <video src={media.item.url} controls={zoom === 1} autoPlay loop className="max-w-[95vw] max-h-[85vh] rounded-xl shadow-2xl outline-none" />
+                <video src={media.item.url} controls={zoom === 1} autoPlay loop className="max-w-[95vw] max-h-[85vh] rounded-xl shadow-2xl" />
               ) : (
-                <img src={media.item.img || media.item.thumbnail_url} alt={media.item.title} className="max-w-[95vw] max-h-[85vh] object-contain rounded-xl shadow-2xl select-none pointer-events-none outline-none" draggable={false} />
+                <img src={media.item.img || media.item.thumbnail_url} alt={media.item.title} className="max-w-[95vw] max-h-[85vh] object-contain rounded-xl shadow-2xl select-none pointer-events-none" draggable={false} />
               )}
             </motion.div>
           </div>
 
-          {/* 🔥 UPGRADED METADATA DISPLAY: Floating Glass Pill instead of full-screen gradient */}
-          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 flex flex-col items-center text-center z-[40] pointer-events-none w-full max-w-xl px-4">
-            <div className="bg-black/60 backdrop-blur-2xl border border-white/10 px-6 py-4 rounded-3xl shadow-2xl">
-               <h2 className="text-white text-xl font-black tracking-tight drop-shadow-md">{media.item.title || "Untitled Upload"}</h2>
-               {media.item.content && <p className="text-white/70 text-xs font-medium mt-1">{media.item.content}</p>}
-            </div>
+          {/* Metadata Display */}
+          <div className="absolute bottom-0 inset-x-0 p-8 pb-24 flex flex-col items-center text-center z-[40] bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none">
+            <h2 className="text-white text-2xl font-black tracking-tight mb-2 drop-shadow-2xl">{media.item.title || "Untitled Upload"}</h2>
+            {media.item.content && <p className="text-white/80 text-sm font-medium max-w-2xl drop-shadow-xl">{media.item.content}</p>}
           </div>
 
           {/* Glass Toolbar for Zoom Controls */}
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1.5 p-1.5 rounded-full bg-black/60 backdrop-blur-2xl border border-white/10 z-50 shadow-2xl pointer-events-auto" onClick={e => e.stopPropagation()}>
-             <button onClick={() => setZoom(z => Math.max(z - 0.5, 1))} className="p-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors outline-none" title="Zoom Out">
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1.5 p-1.5 rounded-full bg-black/40 backdrop-blur-xl border border-white/10 z-50 shadow-2xl pointer-events-auto" onClick={e => e.stopPropagation()}>
+             <button onClick={() => setZoom(z => Math.max(z - 0.5, 1))} className="p-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors" title="Zoom Out">
                 <ZoomOut size={18} />
              </button>
              
@@ -178,13 +181,13 @@ export const MediaViewerModal = ({ media, updateMedia, closeMediaViewer, items }
                 {Math.round(zoom * 100)}%
              </div>
              
-             <button onClick={() => setZoom(z => Math.min(z + 0.5, 5))} className="p-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors outline-none" title="Zoom In">
+             <button onClick={() => setZoom(z => Math.min(z + 0.5, 5))} className="p-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors" title="Zoom In">
                 <ZoomIn size={18} />
              </button>
              
              <div className="w-px h-4 bg-white/20 mx-1" />
              
-             <button onClick={() => setZoom(1)} className="p-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors outline-none" title="Reset Zoom">
+             <button onClick={() => setZoom(1)} className="p-2.5 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors" title="Reset Zoom">
                 <Maximize size={18} />
              </button>
           </div>

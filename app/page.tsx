@@ -75,6 +75,10 @@ export default function BrainboardBalanced() {
   const [initialSelection, setInitialSelection] = useState<Set<string | number>>(new Set());
 
   const [activeIndex, setActiveIndex] = useState(-1);
+  
+  // PERFORMANCE: Lasso bounding box cache
+  const cardBoundsRef = useRef<{ id: string, rect: DOMRect }[]>([]);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
      setSelectedItems(new Set());
@@ -208,28 +212,38 @@ export default function BrainboardBalanced() {
 
     setLasso({ active: true, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY });
     setInitialSelection(e.shiftKey ? new Set(selectedItems) : new Set());
+
+    // CACHE BOUNDS ONCE ON CLICK FOR LAG-FREE LASSO
+    const cards = document.querySelectorAll('.lasso-selectable');
+    cardBoundsRef.current = Array.from(cards).map(card => ({
+        id: card.getAttribute('data-id')!,
+        rect: card.getBoundingClientRect()
+    }));
   };
 
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
         if (!lasso.active) return;
         e.preventDefault(); 
-        setLasso(prev => ({ ...prev, currentX: e.clientX, currentY: e.clientY }));
 
-        const minX = Math.min(lasso.startX, e.clientX);
-        const maxX = Math.max(lasso.startX, e.clientX);
-        const minY = Math.min(lasso.startY, e.clientY);
-        const maxY = Math.max(lasso.startY, e.clientY);
-        const newSelected = new Set(initialSelection);
-        const cards = document.querySelectorAll('.lasso-selectable');
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-        cards.forEach(card => {
-            const rect = card.getBoundingClientRect();
-            if (minX < rect.right && maxX > rect.left && minY < rect.bottom && maxY > rect.top) {
-                newSelected.add(card.getAttribute('data-id')!);
-            }
+        rafRef.current = requestAnimationFrame(() => {
+            setLasso(prev => ({ ...prev, currentX: e.clientX, currentY: e.clientY }));
+
+            const minX = Math.min(lasso.startX, e.clientX);
+            const maxX = Math.max(lasso.startX, e.clientX);
+            const minY = Math.min(lasso.startY, e.clientY);
+            const maxY = Math.max(lasso.startY, e.clientY);
+            const newSelected = new Set(initialSelection);
+
+            cardBoundsRef.current.forEach(({ id, rect }) => {
+                if (minX < rect.right && maxX > rect.left && minY < rect.bottom && maxY > rect.top) {
+                    newSelected.add(id);
+                }
+            });
+            setSelectedItems(newSelected);
         });
-        setSelectedItems(newSelected);
     };
 
     const handlePointerUp = () => { 
@@ -901,6 +915,47 @@ export default function BrainboardBalanced() {
       );
   }
 
+  if (!session) {
+      return (
+        <div className={`relative h-screen w-full bg-[#000000] text-white overflow-hidden selection:bg-teal-500/30 flex flex-col items-center justify-center ${inter.className}`}>
+          <nav className="absolute top-0 w-full flex justify-between items-center px-6 md:px-12 py-8 z-50">
+            <div className="font-bold text-xl md:text-2xl tracking-tighter flex items-center gap-3 drop-shadow-lg">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-white/5 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 shadow-xl">
+                  <Sparkles size={20} className="text-teal-400" />
+              </div>
+              brainboard.
+            </div>
+            <motion.button 
+                whileHover={bounceHover} 
+                whileTap={bounceTap} 
+                onClick={handleGoogleLogin} 
+                className="px-4 py-2.5 md:px-6 md:py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-4xl text-xs md:text-sm font-bold transition-colors backdrop-blur-xl shadow-2xl"
+            >
+                Enter Workspace
+            </motion.button>
+          </nav>
+          <main className="relative z-20 flex flex-col items-center text-center max-w-5xl px-6 w-full mt-10">
+            <motion.h1 
+                initial={{ opacity: 0, y: 20 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                transition={{ duration: 0.7, delay: 0.1 }} 
+                className="text-7xl md:text-8xl lg:text-[8rem] font-black tracking-tighter mb-10 leading-[0.95] w-full drop-shadow-2xl"
+            >
+                Curate your <span className="text-transparent bg-clip-text bg-linear-to-br from-teal-400 to-emerald-600">mind.</span>
+            </motion.h1>
+            <motion.button 
+                whileHover={bounceHover} 
+                whileTap={bounceTap} 
+                onClick={handleGoogleLogin} 
+                className={`group bg-white text-black text-base md:text-lg font-black px-10 py-4 md:px-12 md:py-5 rounded-[3rem] transition-all flex items-center gap-3 shadow-[0_0_60px_rgba(20,184,166,0.4)] hover:shadow-[0_0_80px_rgba(20,184,166,0.6)]`}
+            >
+                Authenticate Securely <ChevronRight className="group-hover:translate-x-1 transition-transform" />
+            </motion.button>
+          </main>
+        </div>
+      );
+  }
+
   return (
     <div className={`flex h-screen w-full p-0 md:p-3 lg:p-4 gap-4 relative transition-colors duration-700 overflow-hidden ${theme.bg} ${theme.text} selection:bg-teal-500/30 ${inter.className}`}>
       
@@ -988,702 +1043,715 @@ export default function BrainboardBalanced() {
          </Command.List>
       </Command.Dialog>
 
-      {!session ? (
-        <div className={`relative h-screen w-full bg-[#000000] text-white overflow-hidden selection:bg-teal-500/30 flex flex-col items-center justify-center`}>
-          <nav className="absolute top-0 w-full flex justify-between items-center px-6 md:px-12 py-8 z-50">
-            <div className="font-bold text-xl md:text-2xl tracking-tighter flex items-center gap-3 drop-shadow-lg">
-              <div className="w-8 h-8 md:w-10 md:h-10 bg-white/5 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 shadow-xl">
-                  <Sparkles size={20} className="text-teal-400" />
-              </div>
-              brainboard.
-            </div>
-            <motion.button 
-                whileHover={bounceHover} 
-                whileTap={bounceTap} 
-                onClick={handleGoogleLogin} 
-                className="px-4 py-2.5 md:px-6 md:py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-4xl text-xs md:text-sm font-bold transition-colors backdrop-blur-xl shadow-2xl"
-            >
-                Enter Workspace
-            </motion.button>
-          </nav>
-          <main className="relative z-20 flex flex-col items-center text-center max-w-5xl px-6 w-full mt-10">
-            <motion.h1 
-                initial={{ opacity: 0, y: 20 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                transition={{ duration: 0.7, delay: 0.1 }} 
-                className="text-7xl md:text-8xl lg:text-[8rem] font-black tracking-tighter mb-10 leading-[0.95] w-full drop-shadow-2xl"
-            >
-                Curate your <span className="text-transparent bg-clip-text bg-linear-to-br from-teal-400 to-emerald-600">mind.</span>
-            </motion.h1>
-            <motion.button 
-                whileHover={bounceHover} 
-                whileTap={bounceTap} 
-                onClick={handleGoogleLogin} 
-                className={`group bg-white text-black text-base md:text-lg font-black px-10 py-4 md:px-12 md:py-5 rounded-[3rem] transition-all flex items-center gap-3 shadow-[0_0_60px_rgba(20,184,166,0.4)] hover:shadow-[0_0_80px_rgba(20,184,166,0.6)]`}
-            >
-                Authenticate Securely <ChevronRight className="group-hover:translate-x-1 transition-transform" />
-            </motion.button>
-          </main>
-        </div>
-      ) : (
-        <>
-          <input type="file" ref={fileInputRef} onChange={handleMediaUpload} accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.txt" multiple className="hidden" />
-          <input type="file" ref={avatarInputRef} onChange={handleAvatarUpload} accept="image/*" className="hidden" />
+      <aside className={`hidden md:flex w-64 h-full shrink-0 flex-col relative z-20 transition-colors duration-700 rounded-3xl border shadow-xl ${theme.island}`}>
+         <div className="p-6 pb-2 pt-8 flex justify-between items-center">
+             <h1 className="font-bold text-2xl tracking-tighter flex items-center gap-2 drop-shadow-sm">
+              <Sparkles className="text-teal-500" size={22} strokeWidth={1.5} /> brainboard
+            </h1>
+         </div>
 
-          <OnboardingModal ui={ui} profile={profile} updateProfile={updateProfile} handleUpdateProfile={handleUpdateProfile} theme={theme} isDark={isDark} />
-          <LogoutConfirmModal ui={ui} updateUi={updateUi} handleSecureLogout={handleSecureLogout} theme={theme} isDark={isDark} />
-          
-          <SettingsModal 
-              ui={ui} 
-              updateUi={updateUi} 
-              profile={profile} 
-              updateProfile={updateProfile} 
-              handleUpdateProfile={handleUpdateProfile} 
-              currentAvatar={currentAvatar} 
-              userDisplayName={userDisplayName} 
-              userHandle={userHandle} 
-              avatarInputRef={avatarInputRef} 
-              teamRole={teamRole} 
-              teamMembers={teamMembers} 
-              session={session} 
-              handleUpdateMemberRole={handleUpdateMemberRole} 
-              theme={theme} 
-              isDark={isDark} 
-          />
-          
-          <MediaViewerModal 
-              media={media} 
-              updateMedia={updateMedia} 
-              closeMediaViewer={closeMediaViewer} 
-              session={session} 
-              teamRole={teamRole} 
-              nav={nav} 
-              setEditingNote={setEditingNote} 
-              profile={profile} 
-              teamWorkspaceId={teamWorkspaceId} 
-              moveToTrash={moveToTrash} 
-              toggleItemReaction={toggleItemReaction} 
-              theme={theme} 
-              isDark={isDark} 
-              items={items} 
-          />
-          
-          <NoteEditorModal 
-              editingNote={editingNote} 
-              updateLocalNoteState={updateLocalNoteState} 
-              handleCloseAndSave={handleCloseAndSave} 
-              moveToTrash={moveToTrash} 
-              ui={ui} 
-              updateUi={updateUi} 
-              theme={theme} 
-              isDark={isDark} 
-              teamMembers={teamMembers} 
-              mentionQuery={mentionQuery} 
-              setMentionQuery={setMentionQuery} 
-              nav={nav} 
-              session={session} 
-              teamRole={teamRole} 
-              showToast={showToast} 
-              toggleItemReaction={toggleItemReaction} 
-              items={items} 
-              profile={profile} 
-          />
-
-          <AnimatePresence>
-            {playingYouTubeId && (
+         <div className="px-4 mb-4 mt-6">
+            <div className={`relative flex items-center p-1 rounded-xl shadow-inner ${isDark ? 'bg-[#000000] border border-white/5' : 'bg-black/5 border border-black/5'}`}>
                <motion.div 
-                   initial={{ opacity: 0 }} 
-                   animate={{ opacity: 1 }} 
-                   exit={{ opacity: 0 }} 
-                   transition={{ duration: 0.2 }} 
-                   className="fixed inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-2xl p-4 md:p-10" 
-                   style={{ zIndex: 99999 }} 
-                   onClick={() => setPlayingYouTubeId(null)}
-               >
-                 <button onClick={() => setPlayingYouTubeId(null)} className="absolute top-6 right-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
-                     <X size={24} />
-                 </button>
-                 <motion.div 
-                     initial={{ scale: 0.95, y: 20 }} 
-                     animate={{ scale: 1, y: 0 }} 
-                     transition={modalSpring} 
-                     className="w-full max-w-6xl aspect-video rounded-3xl overflow-hidden shadow-2xl bg-black border border-white/10" 
-                     onClick={e => e.stopPropagation()}
-                 >
-                    <iframe src={`https://www.youtube.com/embed/${playingYouTubeId}?autoplay=1&rel=0`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                 </motion.div>
-               </motion.div>
-            )}
-          </AnimatePresence>
-
-          <aside className={`hidden md:flex w-64 h-full shrink-0 flex-col relative z-20 transition-colors duration-700 rounded-3xl border shadow-xl ${theme.island}`}>
-             <div className="p-6 pb-2 pt-8 flex justify-between items-center">
-                 <h1 className="font-bold text-2xl tracking-tighter flex items-center gap-2 drop-shadow-sm">
-                  <Sparkles className="text-teal-500" size={22} strokeWidth={1.5} /> brainboard
-                </h1>
-             </div>
-
-             <div className="px-4 mb-4 mt-6">
-                <div className={`relative flex items-center p-1 rounded-xl shadow-inner ${isDark ? 'bg-[#000000] border border-white/5' : 'bg-black/5 border border-black/5'}`}>
-                   <motion.div 
-                       layoutId="workspace-pill-desktop" 
-                       className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm border ${isDark ? 'bg-zinc-800 border-white/5' : 'bg-white border-[#e8e4dc]'}`} 
-                       initial={false} 
-                       animate={{ left: nav.workspace === 'personal' ? '4px' : 'calc(50%)' }} 
-                       transition={modalSpring} 
-                   />
-                   <button onClick={() => { updateNav({ workspace: 'personal', viewMode: 'grid' }); updateUi({ isChatOpen: false }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === 'personal' ? 'text-teal-600 dark:text-teal-400' : theme.textMuted}`}>
-                       Personal
-                   </button>
-                   <button onClick={() => { updateNav({ workspace: 'team', viewMode: 'grid' }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === 'team' ? 'text-teal-600 dark:text-teal-400' : theme.textMuted}`}>
-                       Team
-                   </button>
-                </div>
-             </div>
-
-             <div className="flex-1 overflow-y-auto px-4 py-4 custom-scrollbar space-y-8">
-                <div>
-                   <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} px-3 mb-2 opacity-70`}>Overview</h4>
-                   <div className="space-y-0.5">
-                     <SidebarItem icon={<Compass size={16} strokeWidth={1.5}/>} label="Everything" active={nav.categoryType === "all"} onClick={() => updateNav({ categoryType: "all", category: "All" })} theme={theme} isDark={isDark} />
-                     <SidebarItem icon={<Pin size={16} strokeWidth={1.5}/>} label="Pinned" active={nav.categoryType === "pinned"} onClick={() => updateNav({ categoryType: "pinned", category: "All" })} theme={theme} isDark={isDark} />
-                   </div>
-                </div>
-
-                <div>
-                   <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} px-3 mb-2 opacity-70`}>Content</h4>
-                   <div className="space-y-0.5">
-                     <SidebarItem icon={<FileText size={16} strokeWidth={1.5}/>} label="Notes" active={nav.categoryType === "type" && nav.category === "notes"} onClick={() => updateNav({ categoryType: "type", category: "notes" })} theme={theme} isDark={isDark} />
-                     <SidebarItem icon={<Globe size={16} strokeWidth={1.5}/>} label="Links & Docs" active={nav.categoryType === "type" && nav.category === "links"} onClick={() => updateNav({ categoryType: "type", category: "links" })} theme={theme} isDark={isDark} />
-                     <SidebarItem icon={<ImageIcon size={16} strokeWidth={1.5}/>} label="Media" active={nav.categoryType === "type" && nav.category === "media"} onClick={() => updateNav({ categoryType: "type", category: "media" })} theme={theme} isDark={isDark} />
-                     <SidebarItem icon={<Hash size={16} strokeWidth={1.5}/>} label="Hashtags" active={(nav.categoryType as any) === "hashtags" || nav.categoryType === "tag"} onClick={() => updateNav({ categoryType: "hashtags" as any, category: "All" })} theme={theme} isDark={isDark} />
-                   </div>
-                </div>
-
-                <div>
-                   <div className="flex items-center justify-between px-3 mb-2 group">
-                     <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} opacity-70`}>My Lists</h4>
-                     {canModifyStructure && (
-                         <button aria-label="Create List" onClick={() => updateSidebar({ isCreatingList: true })} className={`opacity-0 group-hover:opacity-100 transition-opacity ${theme.textMuted} hover:${theme.text}`}>
-                             <Plus size={14} strokeWidth={1.5}/>
-                         </button>
-                     )}
-                   </div>
-                   <div className="space-y-0.5">
-                      {sidebar.isCreatingList && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
-                          <ListIcon size={14} strokeWidth={1.5} className="text-teal-500" />
-                          <input 
-                              autoFocus 
-                              type="text" 
-                              value={sidebar.newListName} 
-                              onChange={e => updateSidebar({ newListName: e.target.value })} 
-                              onKeyDown={e => { 
-                                  if (e.key === 'Enter') { setCustomLists(p => [...p, sidebar.newListName]); updateSidebar({ isCreatingList: false, newListName: "" }); } 
-                                  if (e.key === 'Escape') updateSidebar({ isCreatingList: false }); 
-                              }} 
-                              onBlur={() => { 
-                                  if (sidebar.newListName) setCustomLists(p => [...p, sidebar.newListName]); 
-                                  updateSidebar({ isCreatingList: false, newListName: "" }); 
-                              }} 
-                              className={`bg-transparent border-none outline-none text-sm font-bold w-full ${theme.text}`} 
-                              placeholder="List name..." 
-                          />
-                        </motion.div>
-                      )}
-                      {listOrder.map((list, index) => (
-                         <SidebarEditableItem 
-                             key={list} 
-                             icon={<ListIcon size={16} strokeWidth={1.5}/>} 
-                             label={list} 
-                             active={nav.categoryType === 'list' && nav.category === list} 
-                             theme={theme} 
-                             isDark={isDark} 
-                             canModify={canModifyStructure} 
-                             onClick={() => updateNav({ categoryType: 'list', category: list })} 
-                             onRename={(oldN: string, newN: string) => handleRenameList(oldN, newN)} 
-                             onDelete={() => handleDeleteList(list)} 
-                             onMoveUp={() => setListOrder(prev => moveArrayItem(prev, index, -1))} 
-                             onMoveDown={() => setListOrder(prev => moveArrayItem(prev, index, 1))} 
-                         />
-                      ))}
-                   </div>
-                </div>
-
-                <div>
-                   <div className="flex items-center justify-between px-3 mb-2 group">
-                     <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} opacity-70`}>Folders</h4>
-                     {canModifyStructure && (
-                         <button aria-label="Create Folder" onClick={() => updateSidebar({ isCreatingFolder: true })} className={`opacity-0 group-hover:opacity-100 transition-opacity ${theme.textMuted} hover:${theme.text}`}>
-                             <Plus size={14} strokeWidth={1.5}/>
-                         </button>
-                     )}
-                   </div>
-                   <div className="space-y-0.5">
-                      {sidebar.isCreatingFolder && (
-                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
-                          <Folder size={14} strokeWidth={1.5} className="text-teal-500" />
-                          <input 
-                              autoFocus 
-                              type="text" 
-                              value={sidebar.newFolderName} 
-                              onChange={e => updateSidebar({ newFolderName: e.target.value })} 
-                              onKeyDown={e => { 
-                                  if (e.key === 'Enter') { setCustomFolders(p => [...p, sidebar.newFolderName]); updateSidebar({ isCreatingFolder: false, newFolderName: "" }); } 
-                                  if (e.key === 'Escape') updateSidebar({ isCreatingFolder: false }); 
-                              }} 
-                              onBlur={() => { 
-                                  if (sidebar.newFolderName) setCustomFolders(p => [...p, sidebar.newFolderName]); 
-                                  updateSidebar({ isCreatingFolder: false, newFolderName: "" }); 
-                              }} 
-                              className={`bg-transparent border-none outline-none text-sm font-bold w-full ${theme.text}`} 
-                              placeholder="Folder name..." 
-                          />
-                        </motion.div>
-                      )}
-                      {folderOrder.map((folder, index) => (
-                         <SidebarEditableItem 
-                             key={folder} 
-                             icon={<Folder size={16} strokeWidth={1.5}/>} 
-                             label={folder} 
-                             active={nav.categoryType === 'folder' && nav.category === folder} 
-                             theme={theme} 
-                             isDark={isDark} 
-                             canModify={canModifyStructure} 
-                             onClick={() => updateNav({ categoryType: 'folder', category: folder })} 
-                             onRename={(oldN: string, newN: string) => handleRenameFolder(oldN, newN)} 
-                             onDelete={() => handleDeleteFolder(folder)} 
-                             onMoveUp={() => setFolderOrder(prev => moveArrayItem(prev, index, -1))} 
-                             onMoveDown={() => setFolderOrder(prev => moveArrayItem(prev, index, 1))} 
-                             onDropItem={(itemId: string | number) => moveItemToFolder(itemId, folder)} 
-                         />
-                      ))}
-                   </div>
-                </div>
-             </div>
-
-             <div className="p-4 mt-auto border-t border-white/5">
-               <button onClick={() => updateUi({ isAccountOpen: true })} className={`flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-2xl transition-all cursor-pointer active:scale-95 ${theme.btnGhost}`}>
-                 <img src={currentAvatar} className={`w-9 h-9 rounded-full object-cover shadow-sm ring-2 ${isDark ? 'ring-white/10' : 'ring-[#e8e4dc]'}`} alt="Avatar" />
-                 <div className="flex-1 min-w-0">
-                   <h3 className="font-bold text-sm tracking-tight truncate leading-tight">{userDisplayName}</h3>
-                 </div>
-                 <Settings size={18} strokeWidth={1.5} className="opacity-50"/>
+                   layoutId="workspace-pill-desktop" 
+                   className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm border ${isDark ? 'bg-zinc-800 border-white/5' : 'bg-white border-[#e8e4dc]'}`} 
+                   initial={false} 
+                   animate={{ left: nav.workspace === 'personal' ? '4px' : 'calc(50%)' }} 
+                   transition={modalSpring} 
+               />
+               <button onClick={() => { updateNav({ workspace: 'personal', viewMode: 'grid' }); updateUi({ isChatOpen: false }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === 'personal' ? 'text-teal-600 dark:text-teal-400' : theme.textMuted}`}>
+                   Personal
                </button>
-             </div>
-          </aside>
+               <button onClick={() => { updateNav({ workspace: 'team', viewMode: 'grid' }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === 'team' ? 'text-teal-600 dark:text-teal-400' : theme.textMuted}`}>
+                   Team
+               </button>
+            </div>
+         </div>
 
-          <main 
-            ref={mainContentRef}
-            onPointerDown={handlePointerDown}
-            className={`flex-1 rounded-3xl flex flex-col relative w-full overflow-hidden focus:outline-none shadow-2xl border ${theme.island}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            tabIndex={0} 
-          >
-            <AnimatePresence>
-               {isSelectMode && (
-                  <motion.div 
-                     initial={{ y: 100, opacity: 0, x: '-50%' }} 
-                     animate={{ y: 0, opacity: 1, x: '-50%' }} 
-                     exit={{ y: 100, opacity: 0, x: '-50%' }}
-                     className="fixed bottom-20 md:bottom-10 left-1/2 flex items-center gap-2 md:gap-3 px-3 py-3 rounded-full shadow-2xl border backdrop-blur-3xl bg-[#1C1C1E]/95 border-white/10 w-[90%] md:w-auto max-w-lg justify-between md:justify-start z-[9999]"
-                  >
-                     <div className="px-2 md:px-4 border-r border-white/10 flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-3 shrink-0">
-                        <span className="text-white text-xs md:text-sm font-black tracking-tight">{selectedItems.size} <span className="text-zinc-400 font-bold hidden sm:inline">Selected</span></span>
-                        <button onClick={handleSelectAll} className="text-[9px] md:text-[10px] text-teal-400 font-bold uppercase tracking-widest hover:text-teal-300">
-                           {selectedItems.size === filteredData.length ? 'Deselect All' : 'Select All'}
-                        </button>
-                     </div>
+         <div className="flex-1 overflow-y-auto px-4 py-4 custom-scrollbar space-y-8">
+            <div>
+               <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} px-3 mb-2 opacity-70`}>Overview</h4>
+               <div className="space-y-0.5">
+                 <SidebarItem icon={<Compass size={16} strokeWidth={1.5}/>} label="Everything" active={nav.categoryType === "all"} onClick={() => updateNav({ categoryType: "all", category: "All" })} theme={theme} isDark={isDark} />
+                 <SidebarItem icon={<Pin size={16} strokeWidth={1.5}/>} label="Pinned" active={nav.categoryType === "pinned"} onClick={() => updateNav({ categoryType: "pinned", category: "All" })} theme={theme} isDark={isDark} />
+               </div>
+            </div>
 
-                     <div className="flex items-center gap-1 md:gap-2 flex-1 justify-end">
-                       {nav.categoryType === 'trash' ? (
-                          <>
-                             <button onClick={() => { bulkRestoreFromTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-emerald-400 hover:bg-white/10 transition-colors">
-                                <RotateCcw size={14} /> <span className="hidden sm:inline">Restore</span>
-                             </button>
-                             <button onClick={() => { if(window.confirm('Delete these items forever?')) { bulkHardDelete(Array.from(selectedItems)); setSelectedItems(new Set()); } }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-red-400 hover:bg-white/10 transition-colors">
-                                <Trash2 size={14} /> <span className="hidden sm:inline">Delete</span>
-                             </button>
-                          </>
-                       ) : (
-                          <>
-                             <div className="relative group">
-                                <select onChange={(e) => { bulkMoveToFolder(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                                   <option value="" disabled selected>Select Folder</option>
-                                   {customFolders.map(f => <option key={f} value={f}>{f}</option>)}
-                                </select>
-                                <button className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-zinc-300 hover:bg-white/10 transition-colors">
-                                    <Folder size={14} className="text-zinc-400" /> <span className="hidden sm:inline">Folder</span>
-                                </button>
-                             </div>
-                             <div className="relative group">
-                                <select onChange={(e) => { bulkMoveToList(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                                   <option value="" disabled selected>Select List</option>
-                                   {customLists.map(l => <option key={l} value={l}>{l}</option>)}
-                                </select>
-                                <button className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-zinc-300 hover:bg-white/10 transition-colors">
-                                    <ListIcon size={14} className="text-zinc-400" /> <span className="hidden sm:inline">List</span>
-                                </button>
-                             </div>
-                             <button onClick={() => { bulkMoveToTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-red-400 hover:bg-white/10 transition-colors">
-                                 <Trash2 size={14} /> <span className="hidden sm:inline">Trash</span>
-                             </button>
-                          </>
-                       )}
-                       <div className="border-l border-white/10 pl-1 md:pl-3">
-                           <button onClick={() => setSelectedItems(new Set())} className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-colors">
-                               <X size={16} />
-                           </button>
-                       </div>
-                     </div>
-                  </motion.div>
-               )}
-            </AnimatePresence>
+            <div>
+               <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} px-3 mb-2 opacity-70`}>Content</h4>
+               <div className="space-y-0.5">
+                 <SidebarItem icon={<FileText size={16} strokeWidth={1.5}/>} label="Notes" active={nav.categoryType === "type" && nav.category === "notes"} onClick={() => updateNav({ categoryType: "type", category: "notes" })} theme={theme} isDark={isDark} />
+                 <SidebarItem icon={<Globe size={16} strokeWidth={1.5}/>} label="Links & Docs" active={nav.categoryType === "type" && nav.category === "links"} onClick={() => updateNav({ categoryType: "type", category: "links" })} theme={theme} isDark={isDark} />
+                 <SidebarItem icon={<ImageIcon size={16} strokeWidth={1.5}/>} label="Media" active={nav.categoryType === "type" && nav.category === "media"} onClick={() => updateNav({ categoryType: "type", category: "media" })} theme={theme} isDark={isDark} />
+                 <SidebarItem icon={<Hash size={16} strokeWidth={1.5}/>} label="Hashtags" active={(nav.categoryType as any) === "hashtags" || nav.categoryType === "tag"} onClick={() => updateNav({ categoryType: "hashtags" as any, category: "All" })} theme={theme} isDark={isDark} />
+               </div>
+            </div>
 
-            <AnimatePresence>
-              {ui.isDragging && (
-                <motion.div 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
-                    exit={{ opacity: 0 }} 
-                    className="absolute inset-0 z-50 bg-teal-500/10 backdrop-blur-md border-4 border-teal-500/50 border-dashed m-6 rounded-3xl flex items-center justify-center pointer-events-none"
-                >
-                  <div className="bg-white dark:bg-zinc-900 px-10 py-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-stone-200 dark:border-zinc-800">
-                    <UploadCloud size={48} strokeWidth={1.5} className="text-teal-500 animate-bounce" />
-                    <h2 className="text-2xl font-bold tracking-tight">Drop files to upload</h2>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <header className="w-full px-6 md:px-12 pt-8 pb-4 shrink-0 flex items-center justify-between gap-6 relative z-50 bg-transparent">
-              <div className="flex-1 max-w-2xl flex items-center gap-4">
-                
-                <div className="relative group flex-1">
-                  <Search className={`absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors ${theme.textMuted} group-focus-within:text-teal-500`} />
-                  <input type="text" placeholder={`Search your mind...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`w-full rounded-2xl py-3 pl-12 pr-12 text-sm font-medium outline-none transition-all ${theme.input} leading-normal`} />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-1 opacity-50">
-                      <CmdIcon size={12} /><span className="text-[10px] font-bold font-mono">K</span>
-                  </div>
-                </div>
-
-                <div className={`hidden md:flex items-center p-1 rounded-xl border shadow-sm ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
-                   <div className="relative group/tooltip flex items-center justify-center">
-                     <button aria-label="Masonry Grid" onClick={() => updateNav({ viewMode: 'grid' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'grid' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
-                         <Columns size={18} strokeWidth={1.5} />
+            <div>
+               <div className="flex items-center justify-between px-3 mb-2 group">
+                 <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} opacity-70`}>My Lists</h4>
+                 {canModifyStructure && (
+                     <button aria-label="Create List" onClick={() => updateSidebar({ isCreatingList: true })} className={`opacity-0 group-hover:opacity-100 transition-opacity ${theme.textMuted} hover:${theme.text}`}>
+                         <Plus size={14} strokeWidth={1.5}/>
                      </button>
-                     <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
-                         Masonry Grid
-                     </div>
-                   </div>
-                   
-                   <div className="relative group/tooltip flex items-center justify-center">
-                     <button aria-label="Uniform Cards" onClick={() => updateNav({ viewMode: 'card' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'card' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
-                         <LayoutGrid size={18} strokeWidth={1.5} />
-                     </button>
-                     <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
-                         Uniform Cards
-                     </div>
-                   </div>
-                   
-                   <div className="relative group/tooltip flex items-center justify-center">
-                     <button aria-label="List View" onClick={() => updateNav({ viewMode: 'list' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'list' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
-                         <AlignJustify size={18} strokeWidth={1.5} />
-                     </button>
-                     <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
-                         List View
-                     </div>
-                   </div>
-                   
-                   <div className="relative group/tooltip flex items-center justify-center">
-                     <button aria-label="Calendar View" onClick={() => updateNav({ viewMode: 'calendar' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'calendar' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
-                         <CalendarIcon size={18} strokeWidth={1.5} />
-                     </button>
-                     <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
-                         Calendar View
-                     </div>
-                   </div>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="relative group/tooltip flex items-center justify-center">
-                   <button aria-label="Manual Sync" onClick={() => fetchItems(1, false)} className={`p-3 rounded-xl transition-all active:scale-95 shadow-sm ${isDark ? 'bg-[#18181B] border border-white/5 text-teal-400 hover:bg-white/10' : 'bg-white border border-black/5 text-teal-600 hover:bg-black/5'}`}>
-                      <RefreshCw size={18} strokeWidth={2} className={ui.isSyncing ? "animate-spin" : ""} />
-                   </button>
-                   <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
-                       Manual Sync
-                   </div>
-                </div>
-
-                <ThemeToggle isDark={isDark} toggle={toggleTheme} />
-
-                <AnimatePresence>
-                   {nav.workspace === 'team' && (
-                     <>
-                       <div className="relative group/tooltip hidden md:flex items-center justify-center">
-                          <button aria-label="Team Chat" onClick={() => updateUi({ isChatOpen: !ui.isChatOpen })} className={`p-3 rounded-xl shadow-sm transition-all active:scale-95 ${ui.isChatOpen ? 'bg-teal-500 text-white border border-teal-600' : (isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5')}`}>
-                             <MessageSquare size={18} strokeWidth={ui.isChatOpen ? 2 : 1.5} className={ui.isChatOpen ? 'text-white' : theme.textMuted} />
-                          </button>
-                          <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
-                              Team Chat
-                          </div>
-                       </div>
-
-                       <div className="relative">
-                          <button aria-label="Notifications" onClick={() => updateUi({ showNotifications: !ui.showNotifications })} className={`p-3 rounded-xl shadow-sm transition-all active:scale-95 ${isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5'}`}>
-                             <Bell size={18} strokeWidth={1.5} className={theme.textMuted} />
-                             {notifications.some(n => !n.read) && <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-[#18181B] dark:border-zinc-900" />}
-                          </button>
-                       </div>
-                     </>
-                   )}
-                </AnimatePresence>
-              </div>
-            </header>
-
-            <div className="px-6 md:px-12 pb-4 md:pb-6 flex flex-col relative z-40 bg-transparent pt-4">
-               <div className="flex items-end justify-between">
-                 {nav.viewMode === 'grid' || nav.viewMode === 'card' || nav.viewMode === 'list' ? (
-                    <>
-                     <div>
-                       <h2 className="text-4xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">
-                         {getCategoryTitle()}
-                       </h2>
-                       <p className={`mt-2 text-xs font-bold flex items-center gap-2 uppercase tracking-widest opacity-80 ${theme.textMuted}`}>
-                          {filteredData.length} items curated
-                       </p>
-                     </div>
-                    </>
-                 ) : (
-                    <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
-                      <h2 className="text-3xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">{format(nav.currentDate, 'MMMM yyyy')}</h2>
-                      <div className={`flex items-center gap-1 border rounded-full p-1 shadow-md backdrop-blur-md ${isDark ? 'bg-zinc-900/50 border-zinc-800/80' : 'bg-white border-stone-200'}`}>
-                         <button aria-label="Previous Month" onClick={() => updateNav({ currentDate: subMonths(nav.currentDate, 1) })} className={`p-2.5 rounded-full transition-colors active:scale-95 ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
-                             <ChevronLeft size={18} strokeWidth={1.5}/>
-                         </button>
-                         <button onClick={() => updateNav({ currentDate: new Date() })} className={`px-5 py-2 text-sm font-bold rounded-full transition-colors active:scale-95 ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-black/5 text-stone-500'}`}>
-                             Today
-                         </button>
-                         <button aria-label="Next Month" onClick={() => updateNav({ currentDate: addMonths(nav.currentDate, 1) })} className={`p-2.5 rounded-full transition-colors active:scale-95 ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
-                             <ChevronRightIcon size={18} strokeWidth={1.5}/>
-                         </button>
-                      </div>
-                    </div>
                  )}
                </div>
+               <div className="space-y-0.5">
+                  {sidebar.isCreatingList && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
+                      <ListIcon size={14} strokeWidth={1.5} className="text-teal-500" />
+                      <input 
+                          autoFocus 
+                          type="text" 
+                          value={sidebar.newListName} 
+                          onChange={e => updateSidebar({ newListName: e.target.value })} 
+                          onKeyDown={e => { 
+                              if (e.key === 'Enter') { setCustomLists(p => [...p, sidebar.newListName]); updateSidebar({ isCreatingList: false, newListName: "" }); } 
+                              if (e.key === 'Escape') updateSidebar({ isCreatingList: false }); 
+                          }} 
+                          onBlur={() => { 
+                              if (sidebar.newListName) setCustomLists(p => [...p, sidebar.newListName]); 
+                              updateSidebar({ isCreatingList: false, newListName: "" }); 
+                          }} 
+                          className={`bg-transparent border-none outline-none text-sm font-bold w-full ${theme.text}`} 
+                          placeholder="List name..." 
+                      />
+                    </motion.div>
+                  )}
+                  {listOrder.map((list, index) => (
+                     <SidebarEditableItem 
+                         key={list} 
+                         icon={<ListIcon size={16} strokeWidth={1.5}/>} 
+                         label={list} 
+                         active={nav.categoryType === 'list' && nav.category === list} 
+                         theme={theme} 
+                         isDark={isDark} 
+                         canModify={canModifyStructure} 
+                         onClick={() => updateNav({ categoryType: 'list', category: list })} 
+                         onRename={(oldN: string, newN: string) => handleRenameList(oldN, newN)} 
+                         onDelete={() => handleDeleteList(list)} 
+                         onMoveUp={() => setListOrder(prev => moveArrayItem(prev, index, -1))} 
+                         onMoveDown={() => setListOrder(prev => moveArrayItem(prev, index, 1))} 
+                     />
+                  ))}
+               </div>
+            </div>
 
-               <AnimatePresence>
-                  {((nav.categoryType as any) === 'hashtags' || nav.categoryType === 'tag') && (
-                     <motion.div 
-                        initial={{ opacity: 0, height: 0 }} 
-                        animate={{ opacity: 1, height: 'auto' }} 
-                        exit={{ opacity: 0, height: 0 }}
-                        className={`flex flex-col gap-4 mt-6 pt-4 border-t ${isDark ? 'border-white/5' : 'border-black/5'} w-full relative z-30`}
-                     >
-                        <div className={`relative flex items-center w-full max-w-md rounded-2xl overflow-hidden border focus-within:border-teal-500 transition-colors shadow-md ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
-                           <Search size={16} className={`absolute left-4 ${theme.textMuted}`} />
-                           <input type="text" placeholder="Search tags..." value={tagSearchQuery} onChange={e => setTagSearchQuery(e.target.value)} className={`w-full bg-transparent border-none py-3 pl-11 pr-4 text-sm font-medium outline-none ${theme.text}`} />
+            <div>
+               <div className="flex items-center justify-between px-3 mb-2 group">
+                 <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} opacity-70`}>Folders</h4>
+                 {canModifyStructure && (
+                     <button aria-label="Create Folder" onClick={() => updateSidebar({ isCreatingFolder: true })} className={`opacity-0 group-hover:opacity-100 transition-opacity ${theme.textMuted} hover:${theme.text}`}>
+                         <Plus size={14} strokeWidth={1.5}/>
+                     </button>
+                 )}
+               </div>
+               <div className="space-y-0.5">
+                  {sidebar.isCreatingFolder && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
+                      <Folder size={14} strokeWidth={1.5} className="text-teal-500" />
+                      <input 
+                          autoFocus 
+                          type="text" 
+                          value={sidebar.newFolderName} 
+                          onChange={e => updateSidebar({ newFolderName: e.target.value })} 
+                          onKeyDown={e => { 
+                              if (e.key === 'Enter') { setCustomFolders(p => [...p, sidebar.newFolderName]); updateSidebar({ isCreatingFolder: false, newFolderName: "" }); } 
+                              if (e.key === 'Escape') updateSidebar({ isCreatingFolder: false }); 
+                          }} 
+                          onBlur={() => { 
+                              if (sidebar.newFolderName) setCustomFolders(p => [...p, sidebar.newFolderName]); 
+                              updateSidebar({ isCreatingFolder: false, newFolderName: "" }); 
+                          }} 
+                          className={`bg-transparent border-none outline-none text-sm font-bold w-full ${theme.text}`} 
+                          placeholder="Folder name..." 
+                      />
+                    </motion.div>
+                  )}
+                  {folderOrder.map((folder, index) => (
+                     <SidebarEditableItem 
+                         key={folder} 
+                         icon={<Folder size={16} strokeWidth={1.5}/>} 
+                         label={folder} 
+                         active={nav.categoryType === 'folder' && nav.category === folder} 
+                         theme={theme} 
+                         isDark={isDark} 
+                         canModify={canModifyStructure} 
+                         onClick={() => updateNav({ categoryType: 'folder', category: folder })} 
+                         onRename={(oldN: string, newN: string) => handleRenameFolder(oldN, newN)} 
+                         onDelete={() => handleDeleteFolder(folder)} 
+                         onMoveUp={() => setFolderOrder(prev => moveArrayItem(prev, index, -1))} 
+                         onMoveDown={() => setFolderOrder(prev => moveArrayItem(prev, index, 1))} 
+                         onDropItem={(itemId: string | number) => moveItemToFolder(itemId, folder)} 
+                     />
+                  ))}
+               </div>
+            </div>
+         </div>
+
+         <div className="p-4 mt-auto border-t border-white/5">
+           <button onClick={() => updateUi({ isAccountOpen: true })} className={`flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-2xl transition-all cursor-pointer active:scale-95 ${theme.btnGhost}`}>
+             <img src={currentAvatar} className={`w-9 h-9 rounded-full object-cover shadow-sm ring-2 ${isDark ? 'ring-white/10' : 'ring-[#e8e4dc]'}`} alt="Avatar" />
+             <div className="flex-1 min-w-0">
+               <h3 className="font-bold text-sm tracking-tight truncate leading-tight">{userDisplayName}</h3>
+             </div>
+             <Settings size={18} strokeWidth={1.5} className="opacity-50"/>
+           </button>
+         </div>
+      </aside>
+
+      <main 
+        ref={mainContentRef}
+        onPointerDown={handlePointerDown}
+        className={`flex-1 rounded-3xl flex flex-col relative w-full overflow-hidden focus:outline-none shadow-2xl border ${theme.island}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        tabIndex={0} 
+      >
+        <AnimatePresence>
+           {isSelectMode && (
+              <motion.div 
+                 initial={{ y: 100, opacity: 0, x: '-50%' }} 
+                 animate={{ y: 0, opacity: 1, x: '-50%' }} 
+                 exit={{ y: 100, opacity: 0, x: '-50%' }}
+                 className="fixed bottom-20 md:bottom-10 left-1/2 flex items-center gap-2 md:gap-3 px-3 py-3 rounded-full shadow-2xl border backdrop-blur-3xl bg-[#1C1C1E]/95 border-white/10 w-[90%] md:w-auto max-w-lg justify-between md:justify-start z-[9999]"
+              >
+                 <div className="px-2 md:px-4 border-r border-white/10 flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-3 shrink-0">
+                    <span className="text-white text-xs md:text-sm font-black tracking-tight">{selectedItems.size} <span className="text-zinc-400 font-bold hidden sm:inline">Selected</span></span>
+                    <button onClick={handleSelectAll} className="text-[9px] md:text-[10px] text-teal-400 font-bold uppercase tracking-widest hover:text-teal-300">
+                       {selectedItems.size === filteredData.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                 </div>
+
+                 <div className="flex items-center gap-1 md:gap-2 flex-1 justify-end">
+                   {nav.categoryType === 'trash' ? (
+                      <>
+                         <button onClick={() => { bulkRestoreFromTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-emerald-400 hover:bg-white/10 transition-colors">
+                            <RotateCcw size={14} /> <span className="hidden sm:inline">Restore</span>
+                         </button>
+                         <button onClick={() => { if(window.confirm('Delete these items forever?')) { bulkHardDelete(Array.from(selectedItems)); setSelectedItems(new Set()); } }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-red-400 hover:bg-white/10 transition-colors">
+                            <Trash2 size={14} /> <span className="hidden sm:inline">Delete</span>
+                         </button>
+                      </>
+                   ) : (
+                      <>
+                         <div className="relative group">
+                            <select onChange={(e) => { bulkMoveToFolder(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                               <option value="" disabled selected>Select Folder</option>
+                               {customFolders.map(f => <option key={f} value={f}>{f}</option>)}
+                            </select>
+                            <button className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-zinc-300 hover:bg-white/10 transition-colors">
+                                <Folder size={14} className="text-zinc-400" /> <span className="hidden sm:inline">Folder</span>
+                            </button>
+                         </div>
+                         <div className="relative group">
+                            <select onChange={(e) => { bulkMoveToList(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                               <option value="" disabled selected>Select List</option>
+                               {customLists.map(l => <option key={l} value={l}>{l}</option>)}
+                            </select>
+                            <button className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-zinc-300 hover:bg-white/10 transition-colors">
+                                <ListIcon size={14} className="text-zinc-400" /> <span className="hidden sm:inline">List</span>
+                            </button>
+                         </div>
+                         <button onClick={() => { bulkMoveToTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-red-400 hover:bg-white/10 transition-colors">
+                             <Trash2 size={14} /> <span className="hidden sm:inline">Trash</span>
+                         </button>
+                      </>
+                   )}
+                   <div className="border-l border-white/10 pl-1 md:pl-3">
+                       <button onClick={() => setSelectedItems(new Set())} className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-colors">
+                           <X size={16} />
+                       </button>
+                   </div>
+                 </div>
+              </motion.div>
+           )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {ui.isDragging && (
+            <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }} 
+                className="absolute inset-0 z-50 bg-teal-500/10 backdrop-blur-md border-4 border-teal-500/50 border-dashed m-6 rounded-3xl flex items-center justify-center pointer-events-none"
+            >
+              <div className="bg-white dark:bg-zinc-900 px-10 py-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border border-stone-200 dark:border-zinc-800">
+                <UploadCloud size={48} strokeWidth={1.5} className="text-teal-500 animate-bounce" />
+                <h2 className="text-2xl font-bold tracking-tight">Drop files to upload</h2>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <header className="w-full px-6 md:px-12 pt-8 pb-4 shrink-0 flex items-center justify-between gap-6 relative z-50 bg-transparent">
+          <div className="flex-1 max-w-2xl flex items-center gap-4">
+            
+            <div className="relative group flex-1">
+              <Search className={`absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors ${theme.textMuted} group-focus-within:text-teal-500`} />
+              <input type="text" placeholder={`Search your mind...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`w-full rounded-2xl py-3 pl-12 pr-12 text-sm font-medium outline-none transition-all ${theme.input} leading-normal`} />
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-1 opacity-50">
+                  <CmdIcon size={12} /><span className="text-[10px] font-bold font-mono">K</span>
+              </div>
+            </div>
+
+            <div className={`hidden md:flex items-center p-1 rounded-xl border shadow-sm ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
+               <div className="relative group/tooltip flex items-center justify-center">
+                 <button aria-label="Masonry Grid" onClick={() => updateNav({ viewMode: 'grid' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'grid' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                     <Columns size={18} strokeWidth={1.5} />
+                 </button>
+                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                     Masonry Grid
+                 </div>
+               </div>
+               
+               <div className="relative group/tooltip flex items-center justify-center">
+                 <button aria-label="Uniform Cards" onClick={() => updateNav({ viewMode: 'card' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'card' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                     <LayoutGrid size={18} strokeWidth={1.5} />
+                 </button>
+                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                     Uniform Cards
+                 </div>
+               </div>
+               
+               <div className="relative group/tooltip flex items-center justify-center">
+                 <button aria-label="List View" onClick={() => updateNav({ viewMode: 'list' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'list' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                     <AlignJustify size={18} strokeWidth={1.5} />
+                 </button>
+                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                     List View
+                 </div>
+               </div>
+               
+               <div className="relative group/tooltip flex items-center justify-center">
+                 <button aria-label="Calendar View" onClick={() => updateNav({ viewMode: 'calendar' })} className={`p-2.5 rounded-lg transition-all active:scale-95 ${nav.viewMode === 'calendar' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                     <CalendarIcon size={18} strokeWidth={1.5} />
+                 </button>
+                 <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                     Calendar View
+                 </div>
+               </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="relative group/tooltip flex items-center justify-center">
+               <button aria-label="Manual Sync" onClick={() => fetchItems(1, false)} className={`p-3 rounded-xl transition-all active:scale-95 shadow-sm ${isDark ? 'bg-[#18181B] border border-white/5 text-teal-400 hover:bg-white/10' : 'bg-white border border-black/5 text-teal-600 hover:bg-black/5'}`}>
+                  <RefreshCw size={18} strokeWidth={2} className={ui.isSyncing ? "animate-spin" : ""} />
+               </button>
+               <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                   Manual Sync
+               </div>
+            </div>
+
+            <ThemeToggle isDark={isDark} toggle={toggleTheme} />
+
+            <AnimatePresence>
+               {nav.workspace === 'team' && (
+                 <>
+                   <div className="relative group/tooltip hidden md:flex items-center justify-center">
+                      <button aria-label="Team Chat" onClick={() => updateUi({ isChatOpen: !ui.isChatOpen })} className={`p-3 rounded-xl shadow-sm transition-all active:scale-95 ${ui.isChatOpen ? 'bg-teal-500 text-white border border-teal-600' : (isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5')}`}>
+                         <MessageSquare size={18} strokeWidth={ui.isChatOpen ? 2 : 1.5} className={ui.isChatOpen ? 'text-white' : theme.textMuted} />
+                      </button>
+                      <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                          Team Chat
+                      </div>
+                   </div>
+
+                   <div className="relative">
+                      <button aria-label="Notifications" onClick={() => updateUi({ showNotifications: !ui.showNotifications })} className={`p-3 rounded-xl shadow-sm transition-all active:scale-95 ${isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5'}`}>
+                         <Bell size={18} strokeWidth={1.5} className={theme.textMuted} />
+                         {notifications.some(n => !n.read) && <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-[#18181B] dark:border-zinc-900" />}
+                      </button>
+                      <AnimatePresence>
+                         {ui.showNotifications && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => updateUi({ showNotifications: false })} />
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-72 md:w-80 z-50 rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.4)] border backdrop-blur-3xl p-2 ${isDark ? 'bg-zinc-900/95 border-zinc-800' : 'bg-white/95 border-[#e8e4dc]'}`}>
+                                 <div className="p-4 border-b border-black/5 dark:border-white/5 mb-2 flex items-center justify-between">
+                                    <h4 className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>Notifications</h4>
+                                    {notifications.some(n => !n.read) && (
+                                       <button onClick={handleMarkAllAsRead} className="text-[10px] text-teal-500 hover:text-teal-600 font-bold uppercase tracking-widest">Mark all read</button>
+                                    )}
+                                 </div>
+                                 <div className="space-y-1 max-h-64 overflow-y-auto custom-scrollbar">
+                                    {notifications.length === 0 ? (
+                                       <div className="p-6 text-center text-sm text-stone-500">No new notifications.</div>
+                                    ) : notifications.map(n => (
+                                       <div key={n.id} onClick={() => handleMarkAsRead(n.id)} className={`p-4 rounded-[16px] transition-colors cursor-pointer group ${n.read ? 'opacity-60' : (isDark ? 'bg-white/5' : 'bg-black/5')} hover:bg-teal-500/10 relative`}>
+                                          <p className={`text-sm font-medium leading-snug mb-1.5 pr-6 ${theme.text}`}>{n.text}</p>
+                                          <p className="text-[10px] font-bold text-teal-500 uppercase tracking-widest">{formatDistanceToNow(n.time)} ago</p>
+                                          {!n.read && <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100"><CheckCircle size={18} className="text-teal-500" /></div>}
+                                       </div>
+                                    ))}
+                                 </div>
+                              </motion.div>
+                            </>
+                         )}
+                      </AnimatePresence>
+                   </div>
+
+                   <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="relative hidden md:block">
+                      <button aria-label="Team Presence" onClick={() => updateUi({ showTeamPresence: !ui.showTeamPresence })} className={`flex items-center p-1.5 rounded-xl shadow-sm cursor-pointer active:scale-95 hover:shadow-md transition-all border ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
+                        <div className="flex -space-x-2 pl-1.5">
+                          {teamMembers.filter(m => m.inWorkspace).slice(0, 3).map((member, i) => (
+                             <img key={i} className={`inline-block h-8 w-8 rounded-full ring-2 object-cover ${isDark ? 'ring-[#18181B]' : 'ring-white'}`} src={member.avatar} alt=""/>
+                          ))}
+                        </div>
+                        <div className="px-4 flex items-center gap-1.5 text-xs font-bold text-stone-500 uppercase tracking-widest">
+                            <Users size={14} strokeWidth={2}/> Team
+                        </div>
+                      </button>
+                      <AnimatePresence>
+                         {ui.showTeamPresence && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => updateUi({ showTeamPresence: false })} />
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-80 z-50 rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.4)] border backdrop-blur-3xl flex flex-col overflow-hidden ${isDark ? 'bg-zinc-900/95 border-zinc-800' : 'bg-white/95 border-[#e8e4dc]'}`}>
+                                 <div className="flex flex-col gap-1 max-h-80 overflow-y-auto custom-scrollbar p-2">
+                                    
+                                    <div className="px-3 pt-3 pb-2">
+                                       <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted}`}>Online Now</h4>
+                                    </div>
+                                    <div className="flex flex-col gap-1 px-1">
+                                       {teamMembers.filter(m => m.inWorkspace && m.status === 'online').length === 0 ? (
+                                          <div className="px-3 py-2 text-sm text-stone-500 font-medium">No one online.</div>
+                                       ) : (
+                                          teamMembers.filter(m => m.inWorkspace && m.status === 'online').map(member => (
+                                             <div key={member.id} className="flex items-center justify-between gap-3 w-full px-3 py-2 rounded-[16px] bg-black/5 dark:bg-white/5">
+                                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                   <img src={member.avatar} className="w-8 h-8 rounded-full object-cover shadow-sm shrink-0" />
+                                                   <span className={`text-sm font-bold truncate ${theme.text}`}>{cleanName(member.name)}</span>
+                                                </div>
+                                                <Circle size={10} className="fill-emerald-500 text-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.8)] rounded-full shrink-0" />
+                                             </div>
+                                          ))
+                                       )}
+                                    </div>
+
+                                    <div className={`mt-2 mb-1 border-t mx-3 ${isDark ? 'border-white/10' : 'border-black/5'}`} />
+
+                                    <div className="px-3 pt-2 pb-2">
+                                       <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted}`}>Offline</h4>
+                                    </div>
+                                    <div className="flex flex-col gap-1 px-1 pb-2">
+                                       {teamMembers.filter(m => m.inWorkspace && m.status === 'offline').map(member => (
+                                          <div key={member.id} className="flex items-center justify-between gap-3 w-full px-3 py-2 rounded-[16px] opacity-60">
+                                             <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                <img src={member.avatar} className="w-8 h-8 rounded-full object-cover grayscale shrink-0" />
+                                                <span className={`text-sm font-bold truncate ${theme.text}`}>{cleanName(member.name)}</span>
+                                             </div>
+                                             <span className="text-[10px] font-medium text-stone-500 whitespace-nowrap shrink-0">seen {formatDistanceToNow(member.lastSeen)} ago</span>
+                                          </div>
+                                       ))}
+                                    </div>
+
+                                 </div>
+                              </motion.div>
+                            </>
+                         )}
+                      </AnimatePresence>
+                   </motion.div>
+                 </>
+               )}
+            </AnimatePresence>
+            
+            <AnimatePresence mode="wait">
+              {nav.categoryType === 'trash' ? (
+                <button key="btn-trash" aria-label="Empty Trash" onClick={emptyTrash} className={`px-6 py-3 rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center gap-2 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white`}>
+                  <Trash2 size={16} strokeWidth={2} /> <span className="hidden md:inline">Empty Trash</span>
+                </button>
+              ) : (
+                <motion.div key="btn-all" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex gap-2">
+                  {canCreate && (
+                     <>
+                        <div className="relative group/tooltip flex items-center justify-center">
+                           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} aria-label="Upload Files" onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`p-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center shadow-sm ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-black'}`}>
+                              <ImageIcon size={18} strokeWidth={1.5} />
+                           </motion.button>
+                           <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                               Upload File, Image, Video, Audio
+                           </div>
                         </div>
                         
-                        <div className="w-full flex flex-wrap gap-2 pt-1 pb-2">
-                           <button onClick={() => updateNav({ categoryType: 'hashtags' as any, category: 'All' })} className={`px-4 py-2 rounded-full text-xs font-bold transition-all border shrink-0 ${(nav.categoryType as any) === 'hashtags' ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
-                               All Hashtags
-                           </button>
-                           {smartTags.filter((t: string) => t.toLowerCase().includes(tagSearchQuery.toLowerCase())).map((tag: string) => (
-                              <button key={tag} onClick={() => updateNav({ categoryType: 'tag', category: tag })} className={`px-4 py-2 rounded-full text-xs font-bold transition-all border shrink-0 ${nav.categoryType === 'tag' && nav.category === tag ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
-                                  #{tag}
-                              </button>
-                           ))}
-                        </div>
-                     </motion.div>
-                  )}
-               </AnimatePresence>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 md:px-12 pb-24 md:pb-20 custom-scrollbar relative z-10">
-              {isLoading && page === 1 ? (
-                 <div className={nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6" : nav.viewMode === 'list' ? "flex flex-col gap-3" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"}>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                       <div key={i} className={`rounded-3xl border relative overflow-hidden ${theme.card} h-64 md:h-85 break-inside-avoid`}>
-                          <div className={`absolute inset-0 -translate-x-full bg-linear-to-r from-transparent ${isDark ? 'via-white/5' : 'via-black/5'} to-transparent animate-shimmer`} />
-                       </div>
-                    ))}
-                 </div>
-              ) : filteredData.length === 0 && (nav.viewMode === 'grid' || nav.viewMode === 'card') ? (
-                 <div className="flex-1 w-full flex flex-col items-center mt-20 text-center opacity-50 px-4">
-                    <div className={`w-full max-w-lg border border-dashed rounded-3xl p-16 flex flex-col items-center justify-center transition-colors shadow-sm ${isDark ? 'border-white/20 bg-white/5' : 'border-black/20 bg-black/5'}`}>
-                      <LayoutGrid size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
-                      <h3 className="text-3xl font-black tracking-tight mb-2">A pristine canvas.</h3>
-                      <p className={`text-base font-medium ${theme.textMuted}`}>Drop a file anywhere, or press `Ctrl+V`.</p>
-                    </div>
-                 </div>
-                 
-              ) : nav.viewMode === 'list' ? (
-                 <div className="flex flex-col gap-4 pb-10">
-                    <AnimatePresence>
-                       {filteredData.map((item, index) => (
-                           <motion.div key={item.id} layout variants={cardVariants} initial="hidden" animate="visible" exit="exit" className="lasso-selectable" data-id={item.id}>
-                              <MemoizedMasonryCard 
-                                  customFolders={customFolders} 
-                                  customLists={customLists} 
-                                  onMoveToFolder={moveItemToFolder} 
-                                  onMoveToList={moveItemToList} 
-                                  onUpdateTags={updateItemTags} 
-                                  onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
-                                  viewMode={nav.viewMode} 
-                                  item={item} 
-                                  theme={theme} 
-                                  isDark={isDark} 
-                                  inTrash={nav.categoryType === 'trash'} 
-                                  activeWorkspace={nav.workspace} 
-                                  currentUserId={session?.user?.id} 
-                                  teamRole={teamRole} 
-                                  teamMembers={teamMembers} 
-                                  onRestore={restoreFromTrash} 
-                                  onHardDelete={hardDelete} 
-                                  onDelete={moveToTrash} 
-                                  onUpdateSticky={updateStickyNote} 
-                                  toggleItemReaction={toggleItemReaction} 
-                                  toggleChecklistItem={toggleChecklistItem} 
-                                  isSelected={selectedItems.has(item.id)} 
-                                  onToggleSelect={handleToggleSelect} 
-                                  isSelectMode={isSelectMode} 
-                                  isActiveKeyboard={activeIndex === index} 
-                                  onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
-                                  onClick={(e: any) => handleOpenItem(item)} 
-                              />
-                           </motion.div>
-                       ))}
-                    </AnimatePresence>
-                 </div>
-
-              ) : nav.viewMode === 'card' || nav.viewMode === 'grid' ? (
-                <div className={nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"}>
-                  <AnimatePresence>
-                    {filteredData.map((item, index) => (
-                         <motion.div key={item.id} layout variants={cardVariants} initial="hidden" animate="visible" exit="exit" className={`${nav.viewMode === 'grid' ? "break-inside-avoid relative" : "h-full relative"} lasso-selectable`} data-id={item.id}>
-                            <MemoizedMasonryCard 
-                                customFolders={customFolders} 
-                                customLists={customLists} 
-                                onMoveToFolder={moveItemToFolder} 
-                                onMoveToList={moveItemToList} 
-                                onUpdateTags={updateItemTags} 
-                                onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
-                                viewMode={nav.viewMode} 
-                                item={item} 
-                                theme={theme} 
-                                isDark={isDark} 
-                                inTrash={nav.categoryType === 'trash'} 
-                                activeWorkspace={nav.workspace} 
-                                currentUserId={session?.user?.id} 
-                                teamRole={teamRole} 
-                                teamMembers={teamMembers} 
-                                onRestore={restoreFromTrash} 
-                                onHardDelete={hardDelete} 
-                                onDelete={moveToTrash} 
-                                onUpdateSticky={updateStickyNote} 
-                                toggleItemReaction={toggleItemReaction} 
-                                toggleChecklistItem={toggleChecklistItem} 
-                                isSelected={selectedItems.has(item.id)} 
-                                onToggleSelect={handleToggleSelect} 
-                                isSelectMode={isSelectMode} 
-                                isActiveKeyboard={activeIndex === index} 
-                                onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
-                                onClick={(e: any) => handleOpenItem(item)} 
-                            />
-                         </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-
-              ) : (
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={modalSpring} className={`w-full rounded-3xl overflow-hidden flex flex-col shadow-2xl border mb-10 ${isDark ? 'bg-[#0E0E12] border-white/5' : 'bg-white border-black/5'}`}>
-                   <div className={`grid grid-cols-7 border-b shrink-0 ${isDark ? 'border-white/5 bg-white/5' : 'border-black/5 bg-black/5'}`}>
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                         <div key={day} className={`p-3 md:p-5 text-center text-[10px] md:text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{day.slice(0, 3)}</div>
-                      ))}
-                   </div>
-                   <div className={`grid grid-cols-7 auto-rows-fr gap-px ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
-                      {calendarDays.map((day, idx) => {
-                         const dayItems = filteredData.filter(item => {
-                             const targetDate = item.scheduled_for ? new Date(item.scheduled_for) : new Date(item.created_at || new Date());
-                             return isSameDay(targetDate, day);
-                         });
-                         const isCurrentMonth = isSameMonth(day, monthStart);
-                         const isToday = isSameDay(day, new Date());
-
-                         return (
-                           <div key={day.toString()} className={`min-h-24 md:min-h-35 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? 'bg-[#0A0A0C]' : 'bg-white') : (isDark ? 'bg-[#0A0A0C]/50 opacity-40' : 'bg-[#faf8f5] opacity-50')}`}>
-                              <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 md:h-10 flex items-center justify-center rounded-full shrink-0 ${isToday ? 'bg-teal-500 text-white shadow-lg shadow-teal-900/20' : theme.textMuted}`}>{format(day, 'd')}</div>
-                              <div className="flex-1 flex flex-col gap-1 md:gap-2 overflow-y-auto custom-scrollbar pr-1">
-                                 {dayItems.map(item => {
-                                    const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-                                    const isYouTube = !!ytMatch;
-                                    const youtubeId = isYouTube ? ytMatch[1] : null;
-
-                                    const isVideo = item.url && (item.url.includes('instagram.com') || isYouTube);
-                                    const chipColor = isVideo 
-                                       ? (isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200') 
-                                       : item.type === 'note' 
-                                       ? (isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-100 text-emerald-700 border-emerald-200')
-                                       : (isDark ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-blue-100 text-blue-700 border-blue-200');
-                                    const Icon = isVideo ? Play : item.type === 'note' ? FileText : Globe;
-                                    
-                                    return (
-                                       <button 
-                                          key={item.id} 
-                                          onClick={() => handleOpenItem(item)}
-                                          className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-xs font-bold border cursor-pointer shadow-sm truncate hover:scale-105 active:scale-95 transition-all ${chipColor}`}
-                                       >
-                                          <Icon size={12} strokeWidth={2} className="shrink-0 md:w-3.5 md:h-3.5" />
-                                          <span className="truncate">{item.title || "Untitled"}</span>
-                                       </button>
-                                    )
-                                 })}
-                              </div>
+                        <div className="relative group/tooltip flex items-center justify-center">
+                           <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} aria-label="New Checklist" onClick={handleNewChecklist} className={`p-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center shadow-sm ${isDark ? 'bg-white/10 text-white' : 'bg-black/5 text-black'}`}>
+                              <CheckSquare size={18} strokeWidth={1.5} />
+                           </motion.button>
+                           <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold rounded-lg opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50">
+                               New Checklist
                            </div>
-                         )
-                      })}
-                   </div>
+                        </div>
+
+                        <motion.button aria-label="New Note" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={handleNewNote} className={`px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 ${theme.btnPrimary}`}>
+                           <Plus size={16} strokeWidth={2} /> <span className="hidden md:inline">New Note</span>
+                        </motion.button>
+                     </>
+                  )}
                 </motion.div>
               )}
+            </AnimatePresence>
+          </div>
+        </header>
 
-              {hasMore && !isLoading && !debouncedSearchQuery && !isSelectMode && (
-                  <div className="w-full flex justify-center mt-12 mb-10">
-                     <button onClick={() => { setPage(p => p+1); fetchItems(page + 1, true); }} className={`px-8 py-3 rounded-full font-bold text-sm transition-all active:scale-95 border shadow-md ${isDark ? 'bg-zinc-800 border-white/5 text-white hover:bg-zinc-700' : 'bg-white border-black/5 text-[#2d2a26] hover:bg-black/5'}`}>
-                         Load More Content
+        <div className="px-6 md:px-12 pb-4 md:pb-6 flex flex-col relative z-40 bg-transparent pt-4">
+           <div className="flex items-end justify-between">
+             {nav.viewMode === 'grid' || nav.viewMode === 'card' || nav.viewMode === 'list' ? (
+                <>
+                 <div>
+                   <h2 className="text-4xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">
+                     {getCategoryTitle()}
+                   </h2>
+                   <p className={`mt-2 text-xs font-bold flex items-center gap-2 uppercase tracking-widest opacity-80 ${theme.textMuted}`}>
+                      {filteredData.length} items curated
+                   </p>
+                 </div>
+                </>
+             ) : (
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
+                  <h2 className="text-3xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">{format(nav.currentDate, 'MMMM yyyy')}</h2>
+                  <div className={`flex items-center gap-1 border rounded-full p-1 shadow-md backdrop-blur-md ${isDark ? 'bg-zinc-900/50 border-zinc-800/80' : 'bg-white border-stone-200'}`}>
+                     <button aria-label="Previous Month" onClick={() => updateNav({ currentDate: subMonths(nav.currentDate, 1) })} className={`p-2.5 rounded-full transition-colors active:scale-95 ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
+                         <ChevronLeft size={18} strokeWidth={1.5}/>
+                     </button>
+                     <button onClick={() => updateNav({ currentDate: new Date() })} className={`px-5 py-2 text-sm font-bold rounded-full transition-colors active:scale-95 ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-black/5 text-stone-500'}`}>
+                         Today
+                     </button>
+                     <button aria-label="Next Month" onClick={() => updateNav({ currentDate: addMonths(nav.currentDate, 1) })} className={`p-2.5 rounded-full transition-colors active:scale-95 ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
+                         <ChevronRightIcon size={18} strokeWidth={1.5}/>
                      </button>
                   </div>
-              )}
-              {isLoading && page > 1 && (<div className="w-full flex justify-center mt-12 mb-10"><Loader2 size={24} className={`animate-spin ${theme.textMuted}`} /></div>)}
+                </div>
+             )}
+           </div>
 
+           <AnimatePresence>
+              {((nav.categoryType as any) === 'hashtags' || nav.categoryType === 'tag') && (
+                 <motion.div 
+                    initial={{ opacity: 0, height: 0 }} 
+                    animate={{ opacity: 1, height: 'auto' }} 
+                    exit={{ opacity: 0, height: 0 }}
+                    className={`flex flex-col gap-4 mt-6 pt-4 border-t ${isDark ? 'border-white/5' : 'border-black/5'} w-full relative z-30`}
+                 >
+                    <div className={`relative flex items-center w-full max-w-md rounded-2xl overflow-hidden border focus-within:border-teal-500 transition-colors shadow-md ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
+                       <Search size={16} className={`absolute left-4 ${theme.textMuted}`} />
+                       <input type="text" placeholder="Search tags..." value={tagSearchQuery} onChange={e => setTagSearchQuery(e.target.value)} className={`w-full bg-transparent border-none py-3 pl-11 pr-4 text-sm font-medium outline-none ${theme.text}`} />
+                    </div>
+                    
+                    <div className="w-full flex flex-wrap gap-2 pt-1 pb-2">
+                       <button onClick={() => updateNav({ categoryType: 'hashtags' as any, category: 'All' })} className={`px-4 py-2 rounded-full text-xs font-bold transition-all border shrink-0 ${(nav.categoryType as any) === 'hashtags' ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
+                           All Hashtags
+                       </button>
+                       {smartTags.filter((t: string) => t.toLowerCase().includes(tagSearchQuery.toLowerCase())).map((tag: string) => (
+                          <button key={tag} onClick={() => updateNav({ categoryType: 'tag', category: tag })} className={`px-4 py-2 rounded-full text-xs font-bold transition-all border shrink-0 ${nav.categoryType === 'tag' && nav.category === tag ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
+                              #{tag}
+                          </button>
+                       ))}
+                    </div>
+                 </motion.div>
+              )}
+           </AnimatePresence>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 md:px-12 pb-24 md:pb-20 custom-scrollbar relative z-10">
+          {isLoading && page === 1 ? (
+             <div className={nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6" : nav.viewMode === 'list' ? "flex flex-col gap-3" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"}>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                   <div key={i} className={`rounded-3xl border relative overflow-hidden ${theme.card} h-64 md:h-85 break-inside-avoid`}>
+                      <div className={`absolute inset-0 -translate-x-full bg-linear-to-r from-transparent ${isDark ? 'via-white/5' : 'via-black/5'} to-transparent animate-shimmer`} />
+                   </div>
+                ))}
+             </div>
+          ) : filteredData.length === 0 && (nav.viewMode === 'grid' || nav.viewMode === 'card') ? (
+             <div className="flex-1 w-full flex flex-col items-center mt-20 text-center opacity-50 px-4">
+                <div className={`w-full max-w-lg border border-dashed rounded-3xl p-16 flex flex-col items-center justify-center transition-colors shadow-sm ${isDark ? 'border-white/20 bg-white/5' : 'border-black/20 bg-black/5'}`}>
+                  <LayoutGrid size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
+                  <h3 className="text-3xl font-black tracking-tight mb-2">A pristine canvas.</h3>
+                  <p className={`text-base font-medium ${theme.textMuted}`}>Drop a file anywhere, or press `Ctrl+V`.</p>
+                </div>
+             </div>
+             
+          ) : nav.viewMode === 'list' ? (
+             <div className="flex flex-col gap-4 pb-10">
+                <AnimatePresence>
+                   {filteredData.map((item, index) => (
+                       <motion.div 
+                           key={item.id} 
+                           id={`card-${item.id}`}
+                           layout 
+                           variants={cardVariants} 
+                           initial="hidden" 
+                           animate="visible" 
+                           exit="exit" 
+                           className="lasso-selectable" 
+                           data-id={item.id}
+                       >
+                          <MemoizedMasonryCard 
+                              customFolders={customFolders} 
+                              customLists={customLists} 
+                              onMoveToFolder={moveItemToFolder} 
+                              onMoveToList={moveItemToList} 
+                              onUpdateTags={updateItemTags} 
+                              onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
+                              viewMode={nav.viewMode} 
+                              item={item} 
+                              theme={theme} 
+                              isDark={isDark} 
+                              inTrash={nav.categoryType === 'trash'} 
+                              activeWorkspace={nav.workspace} 
+                              currentUserId={session?.user?.id} 
+                              teamRole={teamRole} 
+                              teamMembers={teamMembers} 
+                              onRestore={restoreFromTrash} 
+                              onHardDelete={hardDelete} 
+                              onDelete={moveToTrash} 
+                              onUpdateSticky={updateStickyNote} 
+                              toggleItemReaction={toggleItemReaction} 
+                              toggleChecklistItem={toggleChecklistItem} 
+                              isSelected={selectedItems.has(item.id)} 
+                              onToggleSelect={handleToggleSelect} 
+                              isSelectMode={isSelectMode} 
+                              isActiveKeyboard={activeIndex === index} 
+                              onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
+                              onClick={(e: any) => handleOpenItem(item)} 
+                          />
+                       </motion.div>
+                   ))}
+                </AnimatePresence>
+             </div>
+
+          ) : nav.viewMode === 'card' || nav.viewMode === 'grid' ? (
+            <div className={nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"}>
+              <AnimatePresence>
+                {filteredData.map((item, index) => (
+                     <motion.div 
+                         key={item.id} 
+                         id={`card-${item.id}`}
+                         layout 
+                         variants={cardVariants} 
+                         initial="hidden" 
+                         animate="visible" 
+                         exit="exit" 
+                         className={`${nav.viewMode === 'grid' ? "break-inside-avoid relative" : "h-full relative"} lasso-selectable`} 
+                         data-id={item.id}
+                     >
+                        <MemoizedMasonryCard 
+                            customFolders={customFolders} 
+                            customLists={customLists} 
+                            onMoveToFolder={moveItemToFolder} 
+                            onMoveToList={moveItemToList} 
+                            onUpdateTags={updateItemTags} 
+                            onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
+                            viewMode={nav.viewMode} 
+                            item={item} 
+                            theme={theme} 
+                            isDark={isDark} 
+                            inTrash={nav.categoryType === 'trash'} 
+                            activeWorkspace={nav.workspace} 
+                            currentUserId={session?.user?.id} 
+                            teamRole={teamRole} 
+                            teamMembers={teamMembers} 
+                            onRestore={restoreFromTrash} 
+                            onHardDelete={hardDelete} 
+                            onDelete={moveToTrash} 
+                            onUpdateSticky={updateStickyNote} 
+                            toggleItemReaction={toggleItemReaction} 
+                            toggleChecklistItem={toggleChecklistItem} 
+                            isSelected={selectedItems.has(item.id)} 
+                            onToggleSelect={handleToggleSelect} 
+                            isSelectMode={isSelectMode} 
+                            isActiveKeyboard={activeIndex === index} 
+                            onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
+                            onClick={(e: any) => handleOpenItem(item)} 
+                        />
+                     </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
-          </main>
-          
-          <TeamChatDrawer 
-              isChatOpen={ui.isChatOpen} 
-              closeChat={() => updateUi({ isChatOpen: false })} 
-              navWorkspace={nav.workspace} 
-              isDark={isDark} 
-              theme={theme} 
-              chatMessages={chatMessages} 
-              chatScrollRef={chatScrollRef} 
-              session={session} 
-              mentionQuery={mentionQuery} 
-              teamMembers={teamMembers} 
-              insertMention={insertChatMention} 
-              chatInput={chatInput} 
-              handleTextareaChange={handleChatTextareaChange} 
-              handleSendChatMessage={handleSendChatMessage} 
-              chatInputRef={chatInputRef} 
-              teamRole={teamRole} 
-              clearChat={handleClearChat} 
-          />
-        </>
-      )}
+
+          ) : (
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={modalSpring} className={`w-full rounded-3xl overflow-hidden flex flex-col shadow-2xl border mb-10 ${isDark ? 'bg-[#0E0E12] border-white/5' : 'bg-white border-black/5'}`}>
+               <div className={`grid grid-cols-7 border-b shrink-0 ${isDark ? 'border-white/5 bg-white/5' : 'border-black/5 bg-black/5'}`}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                     <div key={day} className={`p-3 md:p-5 text-center text-[10px] md:text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{day.slice(0, 3)}</div>
+                  ))}
+               </div>
+               <div className={`grid grid-cols-7 auto-rows-fr gap-px ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
+                  {calendarDays.map((day, idx) => {
+                     const dayItems = filteredData.filter(item => {
+                         const targetDate = item.scheduled_for ? new Date(item.scheduled_for) : new Date(item.created_at || new Date());
+                         return isSameDay(targetDate, day);
+                     });
+                     const isCurrentMonth = isSameMonth(day, monthStart);
+                     const isToday = isSameDay(day, new Date());
+
+                     return (
+                       <div key={day.toString()} className={`min-h-24 md:min-h-35 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? 'bg-[#0A0A0C]' : 'bg-white') : (isDark ? 'bg-[#0A0A0C]/50 opacity-40' : 'bg-[#faf8f5] opacity-50')}`}>
+                          <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 md:h-10 flex items-center justify-center rounded-full shrink-0 ${isToday ? 'bg-teal-500 text-white shadow-lg shadow-teal-900/20' : theme.textMuted}`}>{format(day, 'd')}</div>
+                          <div className="flex-1 flex flex-col gap-1 md:gap-2 overflow-y-auto custom-scrollbar pr-1">
+                             {dayItems.map(item => {
+                                const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+                                const isYouTube = !!ytMatch;
+                                const youtubeId = isYouTube ? ytMatch[1] : null;
+
+                                const isVideo = item.url && (item.url.includes('instagram.com') || isYouTube);
+                                const chipColor = isVideo 
+                                   ? (isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200') 
+                                   : item.type === 'note' 
+                                   ? (isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-100 text-emerald-700 border-emerald-200')
+                                   : (isDark ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-blue-100 text-blue-700 border-blue-200');
+                                const Icon = isVideo ? Play : item.type === 'note' ? FileText : Globe;
+                                
+                                return (
+                                   <button 
+                                      key={item.id} 
+                                      onClick={() => handleOpenItem(item)}
+                                      className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded-lg md:rounded-xl text-[10px] md:text-xs font-bold border cursor-pointer shadow-sm truncate hover:scale-105 active:scale-95 transition-all ${chipColor}`}
+                                   >
+                                      <Icon size={12} strokeWidth={2} className="shrink-0 md:w-3.5 md:h-3.5" />
+                                      <span className="truncate">{item.title || "Untitled"}</span>
+                                   </button>
+                                )
+                             })}
+                          </div>
+                       </div>
+                     )
+                  })}
+               </div>
+            </motion.div>
+          )}
+
+          {hasMore && !isLoading && !debouncedSearchQuery && !isSelectMode && (
+              <div className="w-full flex justify-center mt-12 mb-10">
+                 <button onClick={() => { setPage(p => p+1); fetchItems(page + 1, true); }} className={`px-8 py-3 rounded-full font-bold text-sm transition-all active:scale-95 border shadow-md ${isDark ? 'bg-zinc-800 border-white/5 text-white hover:bg-zinc-700' : 'bg-white border-black/5 text-[#2d2a26] hover:bg-black/5'}`}>
+                     Load More Content
+                 </button>
+              </div>
+          )}
+          {isLoading && page > 1 && (<div className="w-full flex justify-center mt-12 mb-10"><Loader2 size={24} className={`animate-spin ${theme.textMuted}`} /></div>)}
+
+        </div>
+      </main>
+      
+      <TeamChatDrawer 
+          isChatOpen={ui.isChatOpen} 
+          closeChat={() => updateUi({ isChatOpen: false })} 
+          navWorkspace={nav.workspace} 
+          isDark={isDark} 
+          theme={theme} 
+          chatMessages={chatMessages} 
+          chatScrollRef={chatScrollRef} 
+          session={session} 
+          mentionQuery={mentionQuery} 
+          teamMembers={teamMembers} 
+          insertMention={insertChatMention} 
+          chatInput={chatInput} 
+          handleTextareaChange={handleChatTextareaChange} 
+          handleSendChatMessage={handleSendChatMessage} 
+          chatInputRef={chatInputRef} 
+          teamRole={teamRole} 
+          clearChat={handleClearChat} 
+      />
     </div>
   );
 }

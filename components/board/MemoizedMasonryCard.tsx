@@ -8,26 +8,9 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
   const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
   const youtubeId = ytMatch ? ytMatch[1] : null;
   const isYouTube = !!youtubeId;
-  const isInstagram = item.url?.includes('instagram.com');
-  const isSocialVideo = item.url && (isInstagram || isYouTube);
+  const isSocialVideo = item.url && (item.url.includes('instagram.com') || isYouTube);
   
-  // 🔥 THE TYPE INTERCEPTOR: Strictly separates Uploaded Media from Web Links
-  let itemType = 'note';
-  if (isSocialVideo) {
-      itemType = 'social_video';
-  } else if (item.url) {
-      // If it has a URL, it is a web link. (Uploaded audio/video/docs have URLs too, so we let those pass)
-      if (item.type === 'video' || item.type === 'audio' || item.type === 'document') {
-          itemType = item.type;
-      } else {
-          itemType = 'link'; // Force anything else (even if backend says 'image') to be a link
-      }
-  } else if (item.type === 'image') {
-      itemType = 'image'; // True uploaded images have NO external url
-  } else {
-      itemType = item.type || 'note';
-  }
-
+  const itemType = isSocialVideo ? 'social_video' : (item.type || (item.url ? 'link' : 'note')); 
   const displayImg = item.img || item.thumbnail_url; 
   
   const [isEditingSticky, setIsEditingSticky] = useState(false);
@@ -124,27 +107,22 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
              onToggleSelect(item.id, e.shiftKey);
          } else {
              if (inTrash) return; 
-             // Strictly map clicks based on our new secure itemType
              if (isYouTube) {
                  onPlayYouTube(youtubeId);
-             } else if (itemType === 'link' || itemType === 'social_video' || itemType === 'document') {
-                 if (item.url) window.open(item.url, '_blank', 'noopener,noreferrer');
-             } else if (itemType === 'image' || itemType === 'video') {
-                 onClick(e); // Let the parent page handle opening the media viewer
              } else {
-                 onClick(e); // Notes
+                 onClick(e);
              }
          }
       }} 
       draggable={!inTrash && !isSelectMode}
       onDragStart={handleDragStart}
-      className={`group/card relative rounded-[24px] transition-all duration-300 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isCardMenuOpen || isTagMenuOpen ? 'z-40 shadow-2xl' : 'z-10 hover:z-20'} ${!inTrash && !isSelectMode ? 'active:cursor-grabbing hover:cursor-grab' : ''}`}
+      className={`group/card relative rounded-[24px] transition-all duration-300 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isCardMenuOpen || isTagMenuOpen ? 'z-40 shadow-2xl' : 'z-10 hover:z-20'} ${!inTrash && !isSelectMode ? 'active:cursor-grabbing hover:cursor-grab' : ''} overflow-hidden`}
     >
       <div className="absolute inset-0 rounded-[24px] pointer-events-none border border-white/5 mix-blend-overlay z-50"></div>
       
       <div
-        className="pointer-events-none absolute -inset-px rounded-[24px] opacity-0 transition duration-300 group-hover/card:opacity-100 z-40"
-        style={{ background: `radial-gradient(400px circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(255,255,255,0.06), transparent 50%)` }}
+        className="pointer-events-none absolute -inset-px rounded-[24px] opacity-0 transition duration-300 group-hover/card:opacity-100 z-40 mix-blend-screen"
+        style={{ background: `radial-gradient(600px circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(20,184,166,0.08), transparent 40%)` }}
       />
 
       {canModify && (
@@ -312,8 +290,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
         </div>
       )}
 
-      {/* Content wrapper with overflow-hidden isolated to protect menus */}
-      <div className={`flex flex-col w-full h-full relative z-0 rounded-[24px] overflow-hidden ${isSelected ? 'opacity-80' : ''}`}>
+      <div className={`flex flex-col w-full h-full relative z-0 ${isSelected ? 'opacity-80' : ''}`}>
 
         {inTrash && !isSelectMode ? (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-40 flex flex-col items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity gap-4 rounded-[24px]">
@@ -348,9 +325,11 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
         {itemType === "image" || itemType === "video" || itemType === "audio" || itemType === "document" ? (
           <div className={`w-full relative font-sans flex-1 flex flex-col justify-between bg-transparent ${viewMode === 'card' ? 'h-full' : 'h-auto'}`}>
             {itemType === "video" && !item.url ? ( 
-              <motion.video src={displayImg} muted autoPlay loop playsInline draggable={false} className={`w-full object-cover transition-transform duration-700 group-hover/card:scale-105 pointer-events-none ${viewMode === 'card' ? 'h-full' : 'h-auto'}`} />
+              // ✨ ADDED LAYOUT ID FOR LIGHTBOX
+              <motion.video layoutId={`media-${item.id}`} src={displayImg} muted autoPlay loop playsInline draggable={false} className={`w-full object-cover transition-transform duration-700 group-hover/card:scale-105 pointer-events-none ${viewMode === 'card' ? 'h-full' : 'h-auto'}`} />
             ) : displayImg ? (
-              <motion.img src={displayImg} loading="lazy" draggable={false} alt={item.title || "Media"} className={`w-full object-cover transition-transform duration-700 group-hover/card:scale-105 ${viewMode === 'card' ? 'h-full' : 'h-auto'} pointer-events-none`} />
+              // ✨ ADDED LAYOUT ID FOR LIGHTBOX
+              <motion.img layoutId={`media-${item.id}`} src={displayImg} loading="lazy" draggable={false} alt={item.title || "Media"} className={`w-full object-cover transition-transform duration-700 group-hover/card:scale-105 ${viewMode === 'card' ? 'h-full' : 'h-auto'} pointer-events-none`} />
             ) : (
               <div className={`w-full flex items-center justify-center ${itemType === 'audio' || itemType === 'document' ? 'h-24' : 'h-40'}`}>
                  {itemType === 'audio' ? <Music size={32} strokeWidth={1.5} className="text-fuchsia-500 opacity-60" /> :
@@ -366,7 +345,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
             )}
             
             {!inTrash && !isSelectMode && (
-              <div className={`absolute inset-0 flex flex-col justify-end p-6 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none ${itemType === 'audio' ? 'pb-20' : ''}`}>
+              <motion.div layoutId={itemType !== 'note' ? `media-text-${item.id}` : undefined} className={`absolute inset-0 flex flex-col justify-end p-6 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none ${itemType === 'audio' ? 'pb-20' : ''}`}>
                  {item.title ? (
                    <>
                      <h3 className="text-white text-base font-bold tracking-tight drop-shadow-md leading-normal truncate w-[85%] [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">{item.title}</h3>
@@ -381,7 +360,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                      </div>
                    </>
                  )}
-              </div>
+              </motion.div>
             )}
           </div>
           
@@ -389,12 +368,14 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
           <div className="flex flex-col h-full justify-between font-sans relative">
             {displayImg && (
               (() => {
+                const isInstagram = item.url?.includes('instagram.com');
                 const mediaHeightClass = viewMode === 'card' ? 'h-40' : (isInstagram ? 'aspect-[4/5]' : isYouTube ? 'aspect-video' : 'h-40');
                 
                 return (
                   <div className={`w-full relative shrink-0 border-b ${isDark ? 'border-white/5' : 'border-black/5'} ${mediaHeightClass}`}>
-                    <div className="absolute inset-0 overflow-hidden rounded-t-[24px]">
-                       <motion.img src={displayImg} loading="lazy" draggable={false} className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-700 pointer-events-none" />
+                    <div className="absolute inset-0 overflow-hidden">
+                       {/* ✨ ADDED LAYOUT ID FOR LIGHTBOX */}
+                       <motion.img layoutId={`media-${item.id}`} src={displayImg} loading="lazy" draggable={false} className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-700 pointer-events-none" />
                     </div>
                   </div>
                 );
@@ -441,10 +422,10 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                        {viewMode === 'card' && item.checklist_items.length > 4 && <span className="text-xs font-bold mt-1 opacity-50">+{item.checklist_items.length - 4} more items</span>}
                    </div>
                ) : (
-                   formatNotePreview(item.content || item.description || item.ai_summary)
+                   formatNotePreview(item.content || item.description)
                )}
             </div>
-            <div className={`absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t ${isDark ? 'from-[#09090B]' : 'from-white'} to-transparent pointer-events-none rounded-b-[24px]`} />
+            <div className={`absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t ${isDark ? 'from-[#09090B]' : 'from-white'} to-transparent pointer-events-none`} />
           </div>
         )}
 
