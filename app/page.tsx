@@ -1,21 +1,21 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef, startTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Inter } from 'next/font/google';
-import { Toaster, toast as sonnerToast } from 'sonner';
-import { Command } from 'cmdk';
-import { supabase } from '@/lib/supabase'; 
-import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow } from 'date-fns';
+import { Inter } from "next/font/google";
+import { Toaster, toast as sonnerToast } from "sonner";
+import { Command } from "cmdk";
+import { supabase } from "@/lib/supabase"; 
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow } from "date-fns";
 
 // --- ICONS ---
 import { 
-  Search, Plus, ImageIcon, Moon, Sun, Trash2, Trash, Loader2, 
+  Search, Plus, ImageIcon, Moon, Sun, Trash2, Loader2, 
   Pin, Sparkles, LayoutGrid, Folder, RefreshCw, Play, Settings, 
   FileText, Globe, Compass, ChevronRight, UploadCloud, 
   List as ListIcon, Calendar as CalendarIcon, ChevronLeft, ChevronRight as ChevronRightIcon, 
-  Users, CheckCircle, MessageSquare, AlignJustify, ShieldAlert, Monitor, CheckSquare, Columns,
-  Bell, Circle, File as FileIcon, Music, RotateCcw, X, Home, Hash, Check, Command as CmdIcon
+  Users, CheckCircle, MessageSquare, AlignJustify, Monitor, CheckSquare, Columns,
+  Bell, Circle, RotateCcw, X, Hash, Command as CmdIcon
 } from "lucide-react";
 
 // --- TYPES & STORE ---
@@ -26,7 +26,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useBrainboardData } from "@/hooks/useBrainboardData";
 import { useTeamSpace } from "@/hooks/useTeamSpace";
-import { modalSpring, bounceHover, bounceTap, staggerVariants, cardVariants, cleanName } from "@/lib/utils";
+import { modalSpring, bounceHover, bounceTap, cardVariants, cleanName } from "@/lib/utils";
 
 // --- COMPONENTS ---
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -40,11 +40,21 @@ import { NoteEditorModal } from "@/components/modals/NoteEditorModal";
 import { TeamChatDrawer } from "@/components/chat/TeamChatDrawer";
 import { MemoizedMasonryCard } from "@/components/board/MemoizedMasonryCard";
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ["latin"] });
+
+// AST-Safe CSS Injection
+const INJECTED_CSS = `
+  .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.1); border-radius: 10px; transition: all 0.3s; }
+  .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.3); }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
+  .animate-shimmer { animation: shimmer 2s infinite linear; }
+`;
 
 export default function BrainboardBalanced() {
   const [session, setSession] = useState<any>(null);
-  const [teamWorkspaceId] = useState<string>('11111111-1111-1111-1111-111111111111'); 
+  const [teamWorkspaceId] = useState<string>("11111111-1111-1111-1111-111111111111"); 
 
   const { ui, nav, profile, sidebar, media, updateUi, updateNav, updateProfile, updateSidebar, updateMedia } = useAppStore();
 
@@ -52,7 +62,7 @@ export default function BrainboardBalanced() {
     updateMedia({ item: null, isScrollMode: false, zoom: 1, speed: 1 });
   }, [updateMedia]);
 
-  const [mentionQuery, setMentionQuery] = useState<{ active: boolean, query: string, target: 'note' | 'chat' }>({ active: false, query: '', target: 'note' });
+  const [mentionQuery, setMentionQuery] = useState<{ active: boolean, query: string, target: "note" | "chat" }>({ active: false, query: "", target: "note" });
   const [chatInput, setChatInput] = useState("");
   
   const [folderOrder, setFolderOrder] = useState<string[]>([]);
@@ -78,6 +88,7 @@ export default function BrainboardBalanced() {
   
   const cardBoundsRef = useRef<{ id: string, rect: DOMRect }[]>([]);
   const rafRef = useRef<number | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null); 
 
   useEffect(() => {
      setSelectedItems(new Set());
@@ -119,38 +130,50 @@ export default function BrainboardBalanced() {
     activeStateRef.current = { category: nav.category, type: nav.categoryType, folders: customFolders, workspace: nav.workspace, userName: profile.displayName, role: teamRole };
   }, [nav.category, nav.categoryType, customFolders, nav.workspace, profile.displayName, teamRole]);
 
+  const loadMoreRef = useCallback((node: HTMLDivElement | null) => {
+      if (isLoading) return;
+      if (observerRef.current) observerRef.current.disconnect();
+      observerRef.current = new IntersectionObserver(entries => {
+          if (entries[0].isIntersecting && hasMore) {
+              setPage((p: number) => p + 1);
+              fetchItems(page + 1, true);
+          }
+      });
+      if (node) observerRef.current.observe(node);
+  }, [isLoading, hasMore, fetchItems, page, setPage]);
+
   const filteredData = useMemo(() => {
     let result = items;
-    if (nav.workspace === 'personal') {
+    if (nav.workspace === "personal") {
         result = result.filter(item => !item.workspace_id); 
     } else {
         result = result.filter(item => item.workspace_id); 
     }
 
-    if (nav.categoryType === 'trash') {
+    if (nav.categoryType === "trash") {
         result = result.filter(item => item.is_deleted === true);
     } else {
       result = result.filter(item => !item.is_deleted);
-      if (nav.categoryType === 'pinned') {
+      if (nav.categoryType === "pinned") {
           result = result.filter(item => item.is_pinned);
-      } else if (nav.categoryType === 'tag') {
+      } else if (nav.categoryType === "tag") {
           result = result.filter(item => item.tags?.includes(nav.category));
-      } else if ((nav.categoryType as any) === 'hashtags') {
+      } else if ((nav.categoryType as any) === "hashtags") {
           result = result.filter(item => item.tags && item.tags.length > 0);
-      } else if (nav.categoryType === 'type') {
+      } else if (nav.categoryType === "type") {
           if (nav.category === "media") result = result.filter(item => item.type === "image" || item.type === "video");
           else if (nav.category === "notes") result = result.filter(item => item.type === "note" || !item.type);
-          else if (nav.category === "links") result = result.filter(item => item.type === "link" || item.type === 'document' || item.type === 'audio');
-      } else if (nav.categoryType === 'folder') {
+          else if (nav.category === "links") result = result.filter(item => item.type === "link" || item.type === "document" || item.type === "audio");
+      } else if (nav.categoryType === "folder") {
           result = result.filter(item => item.sections?.includes(nav.category) || item.section === nav.category);
-      } else if (nav.categoryType === 'list') {
+      } else if (nav.categoryType === "list") {
           result = result.filter(item => item.list_name === nav.category);
       }
     }
 
     if (debouncedSearchQuery) {
       const q = debouncedSearchQuery.toLowerCase();
-      result = result.filter(item => `${item.title || ''} ${item.content || ''} ${(item.tags || []).join(' ')} ${item.ai_summary || ''}`.toLowerCase().includes(q));
+      result = result.filter(item => `${item.title || ""} ${item.content || ""} ${(item.tags || []).join(" ")} ${item.ai_summary || ""}`.toLowerCase().includes(q));
     }
     return result.sort((a, b) => {
       if (a.is_pinned && !b.is_pinned) return -1;
@@ -162,7 +185,7 @@ export default function BrainboardBalanced() {
   const smartTags = useMemo(() => {
     const tags = new Set<string>();
     items.forEach(item => {
-       if (item.tags && !item.is_deleted && (!item.workspace_id === (nav.workspace === 'personal'))) {
+       if (item.tags && !item.is_deleted && (!item.workspace_id === (nav.workspace === "personal"))) {
           item.tags.forEach((t: string) => tags.add(t));
        }
     });
@@ -208,16 +231,16 @@ export default function BrainboardBalanced() {
     if (e.button !== 0) return; 
     
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('a') || target.closest('input') || target.closest('textarea') || target.closest('.lasso-selectable') || target.closest('.group\\/card')) {
+    if (target.closest("button") || target.closest("a") || target.closest("input") || target.closest("textarea") || target.closest(".lasso-selectable")) {
         return;
     }
 
     setLasso({ active: true, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY });
     setInitialSelection(e.shiftKey ? new Set(selectedItems) : new Set());
 
-    const cards = document.querySelectorAll('.lasso-selectable');
+    const cards = document.querySelectorAll(".lasso-selectable");
     cardBoundsRef.current = Array.from(cards).map(card => ({
-        id: card.getAttribute('data-id')!,
+        id: card.getAttribute("data-id")!,
         rect: card.getBoundingClientRect()
     }));
   };
@@ -243,7 +266,15 @@ export default function BrainboardBalanced() {
                     newSelected.add(id);
                 }
             });
-            setSelectedItems(newSelected);
+
+            setSelectedItems(prev => {
+                if (prev.size !== newSelected.size) return newSelected;
+                let isEqual = true;
+                for (let item of prev) {
+                    if (!newSelected.has(item)) { isEqual = false; break; }
+                }
+                return isEqual ? prev : newSelected;
+            });
         });
     };
 
@@ -251,24 +282,24 @@ export default function BrainboardBalanced() {
         if (lasso.active) setLasso(prev => ({ ...prev, active: false })); 
     };
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
     
     return () => { 
-        window.removeEventListener('pointermove', handlePointerMove); 
-        window.removeEventListener('pointerup', handlePointerUp); 
+        window.removeEventListener("pointermove", handlePointerMove); 
+        window.removeEventListener("pointerup", handlePointerUp); 
     };
   }, [lasso.active, lasso.startX, lasso.startY, initialSelection]);
 
 
   const handleOpenItem = useCallback((item: any) => {
-      if (nav.categoryType === 'trash') return; 
+      if (nav.categoryType === "trash") return; 
       
-      const isExternalLink = item.url && !item.url.includes('supabase.co');
+      const isExternalLink = item.url && !item.url.includes("supabase.co");
       
       if (isExternalLink) { 
-          window.open(item.url, '_blank', 'noopener,noreferrer'); 
-      } else if (item.type === 'image' || item.type === 'video') { 
+          window.open(item.url, "_blank", "noopener,noreferrer"); 
+      } else if (item.type === "image" || item.type === "video") { 
           updateMedia({ item }); 
       } else { 
           setEditingNote(item); 
@@ -277,66 +308,66 @@ export default function BrainboardBalanced() {
 
   useEffect(() => {
      const down = (e: KeyboardEvent) => {
-        if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName) || (e.target as HTMLElement).isContentEditable) return;
+        if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName) || (e.target as HTMLElement).isContentEditable) return;
         
-        if (e.key === 'k' && (e.metaKey || e.ctrlKey)) { 
+        if (e.key === "k" && (e.metaKey || e.ctrlKey)) { 
             e.preventDefault(); 
             setCmdKOpen((open) => !open); 
             return; 
         }
 
-        if (e.key === 'ArrowRight' || e.key === 'l') { 
+        if (e.key === "ArrowRight" || e.key === "l") { 
             e.preventDefault(); 
             setActiveIndex(prev => Math.min(prev + 1, filteredData.length - 1)); 
-        } else if (e.key === 'ArrowLeft' || e.key === 'h') { 
+        } else if (e.key === "ArrowLeft" || e.key === "h") { 
             e.preventDefault(); 
             setActiveIndex(prev => Math.max(prev - 1, 0)); 
-        } else if (e.key === 'ArrowDown' || e.key === 'j') { 
+        } else if (e.key === "ArrowDown" || e.key === "j") { 
             e.preventDefault(); 
-            setActiveIndex(prev => Math.min(prev + (nav.viewMode === 'grid' ? 4 : 1), filteredData.length - 1)); 
-        } else if (e.key === 'ArrowUp' || e.key === 'k') { 
+            setActiveIndex(prev => Math.min(prev + (nav.viewMode === "grid" ? 4 : 1), filteredData.length - 1)); 
+        } else if (e.key === "ArrowUp" || e.key === "k") { 
             e.preventDefault(); 
-            setActiveIndex(prev => Math.max(prev - (nav.viewMode === 'grid' ? 4 : 1), 0)); 
+            setActiveIndex(prev => Math.max(prev - (nav.viewMode === "grid" ? 4 : 1), 0)); 
         } 
         
-        else if (e.key === 'Enter' && activeIndex >= 0) { 
+        else if (e.key === "Enter" && activeIndex >= 0) { 
             e.preventDefault(); 
             const item = filteredData[activeIndex]; 
             if (item) handleOpenItem(item); 
-        } else if (e.key === 'x' && activeIndex >= 0) { 
+        } else if (e.key === "x" && activeIndex >= 0) { 
             e.preventDefault(); 
             const item = filteredData[activeIndex]; 
             if (item) handleToggleSelect(item.id, false); 
-        } else if ((e.key === 'Backspace' || e.key === 'Delete') && activeIndex >= 0) { 
+        } else if ((e.key === "Backspace" || e.key === "Delete") && activeIndex >= 0) { 
             e.preventDefault(); 
             const item = filteredData[activeIndex]; 
-            if (item && nav.categoryType !== 'trash') moveToTrash(item.id); 
-        } else if (e.key === 'Escape') { 
+            if (item && nav.categoryType !== "trash") moveToTrash(item.id); 
+        } else if (e.key === "Escape") { 
             e.preventDefault(); 
             setSelectedItems(new Set()); 
             setLastSelected(null); 
             setActiveIndex(-1); 
         }
      };
-     document.addEventListener('keydown', down);
-     return () => document.removeEventListener('keydown', down);
+     document.addEventListener("keydown", down);
+     return () => document.removeEventListener("keydown", down);
   }, [filteredData, activeIndex, nav.viewMode, handleOpenItem, handleToggleSelect, moveToTrash, nav.categoryType]);
 
   useEffect(() => {
       if (activeIndex >= 0) {
           const el = document.getElementById(`card-${filteredData[activeIndex]?.id}`);
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
   }, [activeIndex, filteredData]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedTheme = localStorage.getItem('brainboard-theme');
-      if (storedTheme) setIsDark(storedTheme === 'dark');
-      else setIsDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (typeof window !== "undefined") {
+      const storedTheme = localStorage.getItem("brainboard-theme");
+      if (storedTheme) setIsDark(storedTheme === "dark");
+      else setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-      const savedFolders = localStorage.getItem('bb-folder-order');
-      const savedLists = localStorage.getItem('bb-list-order');
+      const savedFolders = localStorage.getItem("bb-folder-order");
+      const savedLists = localStorage.getItem("bb-list-order");
       if (savedFolders) setFolderOrder(JSON.parse(savedFolders));
       if (savedLists) setListOrder(JSON.parse(savedLists));
     }
@@ -349,7 +380,7 @@ export default function BrainboardBalanced() {
             if (!updated.includes(f)) updated.push(f); 
         });
         updated = updated.filter(f => customFolders.includes(f)); 
-        localStorage.setItem('bb-folder-order', JSON.stringify(updated)); 
+        localStorage.setItem("bb-folder-order", JSON.stringify(updated)); 
         return updated;
     });
   }, [customFolders]);
@@ -361,17 +392,19 @@ export default function BrainboardBalanced() {
             if (!updated.includes(l)) updated.push(l); 
         });
         updated = updated.filter(l => customLists.includes(l)); 
-        localStorage.setItem('bb-list-order', JSON.stringify(updated)); 
+        localStorage.setItem("bb-list-order", JSON.stringify(updated)); 
         return updated;
     });
   }, [customLists]);
 
   const toggleTheme = () => {
     const nextTheme = !isDark; 
-    setIsDark(nextTheme);
-    if (typeof window !== 'undefined') {
-        localStorage.setItem('brainboard-theme', nextTheme ? 'dark' : 'light');
+    if (typeof window !== "undefined") {
+        localStorage.setItem("brainboard-theme", nextTheme ? "dark" : "light");
     }
+    startTransition(() => {
+        setIsDark(nextTheme);
+    });
   };
 
   const theme = {
@@ -391,7 +424,7 @@ export default function BrainboardBalanced() {
     setItems([]); 
     await supabase.auth.signOut(); 
     setSession(null);
-    if (typeof window !== 'undefined') localStorage.clear();
+    if (typeof window !== "undefined") localStorage.clear();
     updateUi({ isAuthLoading: false }); 
   }, [updateUi, setItems]);
 
@@ -400,7 +433,7 @@ export default function BrainboardBalanced() {
       const { data: { user } } = await supabase.auth.getUser(); 
       if (user) {
         setSession({ user });
-        const dName = user.user_metadata?.display_name || user.email?.split('@')[0] || "";
+        const dName = user.user_metadata?.display_name || user.email?.split("@")[0] || "";
         const uName = user.user_metadata?.username || "";
         
         updateProfile({ 
@@ -410,13 +443,13 @@ export default function BrainboardBalanced() {
         });
         
         try { 
-            await supabase.from('profiles').upsert({ 
+            await supabase.from("profiles").upsert({ 
                 id: user.id, 
                 display_name: dName, 
                 username: uName, 
-                avatar_url: user.user_metadata?.avatar_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${user.email}`, 
+                avatar_url: user.user_metadata?.avatar_url || ("https://api.dicebear.com/9.x/shapes/svg?seed=" + user.email), 
                 updated_at: new Date().toISOString() 
-            }, { onConflict: 'id' }); 
+            }, { onConflict: "id" }); 
         } catch(e) {}
         
         fetchProfilesAndRole(user);
@@ -429,14 +462,14 @@ export default function BrainboardBalanced() {
     verifyUser();
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') { 
+      if (event === "SIGNED_OUT") { 
           setSession(null); 
           setItems([]); 
           updateUi({ isAccountOpen: false, showOnboarding: false, showLogoutConfirm: false }); 
       } else if (session?.user) { 
         setSession(session); 
         updateProfile({ 
-            displayName: session.user.user_metadata?.display_name || session.user.email?.split('@')[0] || "", 
+            displayName: session.user.user_metadata?.display_name || session.user.email?.split("@")[0] || "", 
             username: session.user.user_metadata?.username || "", 
             usernameChanged: session.user.user_metadata?.username_changed || false 
         });
@@ -456,7 +489,11 @@ export default function BrainboardBalanced() {
     if (!session?.user) return;
     updateProfile({ isSaving: true, error: "" });
 
-    const cleanUsername = profile.username.trim().toLowerCase().replace(/^@/, '').replace(/[^a-z0-9_]/g, '');
+    let cleanUsername = profile.username.trim().toLowerCase();
+    if (cleanUsername.startsWith("@")) {
+        cleanUsername = cleanUsername.substring(1);
+    }
+    cleanUsername = cleanUsername.split("").filter((c: string) => (c >= "a" && c <= "z") || (c >= "0" && c <= "9") || c === "_").join("");
 
     if (!cleanUsername || !profile.displayName.trim()) {
        updateProfile({ error: "Name and Username are required.", isSaving: false });
@@ -472,7 +509,7 @@ export default function BrainboardBalanced() {
     }
 
     if (isUsernameDifferent) {
-      const { data: existingUsers } = await supabase.from('profiles').select('id').eq('username', cleanUsername);
+      const { data: existingUsers } = await supabase.from("profiles").select("id").eq("username", cleanUsername);
       if (existingUsers && existingUsers.length > 0) {
         const isMe = existingUsers.every(u => u.id === session.user.id);
         if (!isMe) {
@@ -494,7 +531,7 @@ export default function BrainboardBalanced() {
     } 
     
     try { 
-        await supabase.from('profiles').upsert({ 
+        await supabase.from("profiles").upsert({ 
            id: session.user.id, 
            display_name: profile.displayName, 
            username: cleanUsername, 
@@ -503,11 +540,11 @@ export default function BrainboardBalanced() {
         }); 
         
         if (ui.showOnboarding) {
-            await supabase.from('workspace_members').upsert({ 
+            await supabase.from("workspace_members").upsert({ 
                 workspace_id: teamWorkspaceId, 
                 user_id: session.user.id, 
-                role: 'editor' 
-            }, { onConflict: 'workspace_id, user_id' });
+                role: "editor" 
+            }, { onConflict: "workspace_id, user_id" });
         }
         showToast(ui.showOnboarding ? "Welcome to Brainboard!" : "Profile updated successfully!"); 
         updateUi({ showOnboarding: false });
@@ -524,12 +561,12 @@ export default function BrainboardBalanced() {
     const file = e.target.files?.[0];
     if (!file || !session?.user?.id) return;
     updateUi({ isUploading: true });
-    const fileName = `avatar-${session.user.id}-${Date.now()}.${file.name.split('.').pop()}`;
+    const fileName = "avatar-" + session.user.id + "-" + Date.now() + "." + file.name.split(".").pop();
     try {
-       await supabase.storage.from('media').upload(fileName, file);
-       const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
+       await supabase.storage.from("media").upload(fileName, file);
+       const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(fileName);
        await supabase.auth.updateUser({ data: { avatar_url: publicUrl } });
-       await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', session.user.id);
+       await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", session.user.id);
        setSession({ ...session, user: { ...session.user, user_metadata: { ...session.user.user_metadata, avatar_url: publicUrl } } });
        fetchProfilesAndRole(session.user);
        showToast("Profile picture updated!");
@@ -540,8 +577,8 @@ export default function BrainboardBalanced() {
   };
 
   const handleGoogleLogin = async () => {
-    if (typeof window === 'undefined') return;
-    await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+    if (typeof window === "undefined") return;
+    await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
   };
 
   const handleChatTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -549,11 +586,17 @@ export default function BrainboardBalanced() {
     setChatInput(val);
     const cursor = e.target.selectionStart;
     const textBeforeCursor = val.substring(0, cursor);
-    const match = textBeforeCursor.match(/@(\w*)$/);
-    if (match && nav.workspace === 'team') {
-       setMentionQuery({ active: true, query: match[1], target: 'chat' });
+    
+    const lastAtIdx = textBeforeCursor.lastIndexOf("@");
+    if (lastAtIdx !== -1 && nav.workspace === "team") {
+       const possibleQuery = textBeforeCursor.substring(lastAtIdx + 1);
+       if (!possibleQuery.includes(" ")) {
+           setMentionQuery({ active: true, query: possibleQuery, target: "chat" });
+       } else {
+           setMentionQuery({ active: false, query: "", target: "chat" });
+       }
     } else {
-       setMentionQuery({ active: false, query: '', target: 'chat' });
+       setMentionQuery({ active: false, query: "", target: "chat" });
     }
   };
 
@@ -563,17 +606,20 @@ export default function BrainboardBalanced() {
     const cursor = chatInputRef.current.selectionStart;
     const textBeforeCursor = currentText.substring(0, cursor);
     const textAfterCursor = currentText.substring(cursor);
-    const textWithoutQuery = textBeforeCursor.replace(/@\w*$/, '');
-    const newText = textWithoutQuery + `@${name.replace(/\s+/g, '')} ` + textAfterCursor;
+    
+    const lastAtIdx = textBeforeCursor.lastIndexOf("@");
+    const textWithoutQuery = lastAtIdx !== -1 ? textBeforeCursor.substring(0, lastAtIdx) : textBeforeCursor;
+    const newText = textWithoutQuery + "@" + name.split(" ").join("") + " " + textAfterCursor;
     
     setChatInput(newText);
-    setMentionQuery({ active: false, query: '', target: 'chat' });
+    setMentionQuery({ active: false, query: "", target: "chat" });
     setTimeout(() => { if(chatInputRef.current) chatInputRef.current.focus(); }, 10);
   };
 
   const handleSendChatMessage = async () => {
     if (!chatInput.trim() || !session?.user?.id) return;
-    const currentAvatar = session?.user?.user_metadata?.avatar_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${session?.user?.email || 'default'}`;
+    const defaultAvatar = "https://api.dicebear.com/9.x/shapes/svg?seed=" + (session?.user?.email || "default");
+    const currentAvatar = session?.user?.user_metadata?.avatar_url || defaultAvatar;
     const payload = {
        workspace_id: teamWorkspaceId,
        user_id: session.user.id,
@@ -582,9 +628,9 @@ export default function BrainboardBalanced() {
        text: chatInput.trim(),
     };
     setChatInput("");
-    setMentionQuery({ active: false, query: '', target: 'chat' });
+    setMentionQuery({ active: false, query: "", target: "chat" });
     try { 
-        await supabase.from('team_messages').insert([payload]); 
+        await supabase.from("team_messages").insert([payload]); 
     } catch(e) {
         console.error(e);
         showToast("Failed to send message", true);
@@ -592,29 +638,29 @@ export default function BrainboardBalanced() {
   };
 
   const handleClearChat = async () => {
-    if (teamRole !== 'admin') return;
+    if (teamRole !== "admin") return;
     if (!window.confirm("Are you sure you want to completely clear the team chat?")) return;
     setChatMessages([]);
-    await supabase.from('team_messages').delete().eq('workspace_id', teamWorkspaceId);
+    await supabase.from("team_messages").delete().eq("workspace_id", teamWorkspaceId);
     showToast("Team chat cleared.");
   };
 
-  const canModifyStructure = nav.workspace === 'personal' || teamRole !== 'viewer';
-  const canCreate = nav.workspace === 'personal' || teamRole !== 'viewer';
+  const canModifyStructure = nav.workspace === "personal" || teamRole !== "viewer";
+  const canCreate = nav.workspace === "personal" || teamRole !== "viewer";
 
   const handleNewNote = () => {
     if (!session?.user?.id) return;
     const newItem: BentoItem = {
-      id: `temp-${Date.now()}`, 
+      id: "temp-" + Date.now(), 
       user_id: session.user.id, 
-      workspace_id: nav.workspace === 'team' ? teamWorkspaceId : undefined,
+      workspace_id: nav.workspace === "team" ? teamWorkspaceId : undefined,
       creator: profile.displayName, 
       type: "note", 
       title: "", 
       content: "",
-      sections: nav.categoryType === 'folder' ? [nav.category] : ["Inbox"], 
-      list_name: nav.categoryType === 'list' ? nav.category : undefined,
-      scheduled_for: nav.viewMode === 'calendar' ? nav.currentDate.toISOString() : undefined,
+      sections: nav.categoryType === "folder" ? [nav.category] : ["Inbox"], 
+      list_name: nav.categoryType === "list" ? nav.category : undefined,
+      scheduled_for: nav.viewMode === "calendar" ? nav.currentDate.toISOString() : undefined,
     };
     setEditingNote(newItem);
   };
@@ -622,17 +668,17 @@ export default function BrainboardBalanced() {
   const handleNewChecklist = () => {
     if (!session?.user?.id) return;
     const newItem: BentoItem = {
-      id: `temp-${Date.now()}`, 
+      id: "temp-" + Date.now(), 
       user_id: session.user.id, 
-      workspace_id: nav.workspace === 'team' ? teamWorkspaceId : undefined,
+      workspace_id: nav.workspace === "team" ? teamWorkspaceId : undefined,
       creator: profile.displayName, 
       type: "note", 
       title: "", 
       is_checklist: true, 
       checklist_items: [],
-      sections: nav.categoryType === 'folder' ? [nav.category] : ["Inbox"], 
-      list_name: nav.categoryType === 'list' ? nav.category : undefined,
-      scheduled_for: nav.viewMode === 'calendar' ? nav.currentDate.toISOString() : undefined,
+      sections: nav.categoryType === "folder" ? [nav.category] : ["Inbox"], 
+      list_name: nav.categoryType === "list" ? nav.category : undefined,
+      scheduled_for: nav.viewMode === "calendar" ? nav.currentDate.toISOString() : undefined,
     };
     setEditingNote(newItem);
   };
@@ -691,35 +737,35 @@ export default function BrainboardBalanced() {
   };
 
   const processAndUploadFiles = async (files: File[]) => {
-    if (nav.workspace === 'team' && teamRole === 'viewer') return showToast("Permission denied.", true);
+    if (nav.workspace === "team" && teamRole === "viewer") return showToast("Permission denied.", true);
     if (!session?.user?.id || files.length === 0) return;
 
     updateUi({ isUploading: true });
 
     for (const file of files) {
-        let type = 'document';
-        if (file.type.startsWith('image/')) type = 'image';
-        else if (file.type.startsWith('video/')) type = 'video';
-        else if (file.type.startsWith('audio/')) type = 'audio';
+        let type = "document";
+        if (file.type.startsWith("image/")) type = "image";
+        else if (file.type.startsWith("video/")) type = "video";
+        else if (file.type.startsWith("audio/")) type = "audio";
 
-        const fileName = `${Math.random()}.${file.name.split('.').pop()}`;
+        const fileName = `${Math.random()}.${file.name.split(".").pop()}`;
         
         try {
-            const { error: storageError } = await supabase.storage.from('media').upload(fileName, file);
+            const { error: storageError } = await supabase.storage.from("media").upload(fileName, file);
             if (storageError) throw storageError;
 
-            const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(fileName);
+            const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(fileName);
             
             await insertItem({
               user_id: session.user.id, 
-              workspace_id: nav.workspace === 'team' ? teamWorkspaceId : null,
+              workspace_id: nav.workspace === "team" ? teamWorkspaceId : null,
               creator: activeStateRef.current.userName, 
               type: type, 
               title: file.name, 
               thumbnail_url: publicUrl, 
-              url: type !== 'image' ? publicUrl : null, 
-              sections: nav.categoryType === 'folder' ? [nav.category] : ["Inbox"], 
-              list_name: nav.categoryType === 'list' ? nav.category : null
+              url: type !== "image" ? publicUrl : null, 
+              sections: nav.categoryType === "folder" ? [nav.category] : ["Inbox"], 
+              list_name: nav.categoryType === "list" ? nav.category : null
             });
             showToast("File added!");
         } catch(error) {
@@ -737,7 +783,7 @@ export default function BrainboardBalanced() {
   const handleDragOver = (e: React.DragEvent) => { 
     e.preventDefault(); 
     e.stopPropagation(); 
-    if (e.dataTransfer.types.includes('Files')) {
+    if (e.dataTransfer.types.includes("Files")) {
        updateUi({ isDragging: true }); 
     }
   };
@@ -754,7 +800,7 @@ export default function BrainboardBalanced() {
     e.preventDefault(); 
     e.stopPropagation();
     updateUi({ isDragging: false });
-    if (e.dataTransfer.types.includes('Files') && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    if (e.dataTransfer.types.includes("Files") && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
        processAndUploadFiles(Array.from(e.dataTransfer.files));
     }
   };
@@ -762,49 +808,58 @@ export default function BrainboardBalanced() {
   useEffect(() => {
     const handleGlobalPaste = async (e: ClipboardEvent) => {
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
       
-      const text = e.clipboardData?.getData('text');
+      const text = e.clipboardData?.getData("text");
       if (!text || !session?.user?.id) return;
 
       const { category, type: catType, folders, workspace, userName, role } = activeStateRef.current;
-      if (workspace === 'team' && role === 'viewer') return; 
+      if (workspace === "team" && role === "viewer") return; 
 
-      const ytRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i;
-      const isYouTubeMatch = text.match(ytRegex);
-      const isYouTube = !!isYouTubeMatch;
-      const youtubeId = isYouTubeMatch ? isYouTubeMatch[1] : null;
+      let isYouTube = false;
+      let youtubeId = null;
+      if (text.includes("youtube.com") || text.includes("youtu.be")) {
+         try {
+             const urlObj = new URL(text);
+             isYouTube = true;
+             if (urlObj.hostname.includes("youtube.com")) {
+                 youtubeId = urlObj.searchParams.get("v") || urlObj.pathname.split("/").pop();
+             } else {
+                 youtubeId = urlObj.pathname.slice(1);
+             }
+         } catch(err) {}
+      }
 
-      const isReel = /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:reel|p|tv)\/([^\/\?#]+)/i.test(text);
-      const isLink = text.startsWith('http://') || text.startsWith('https://');
+      const isReel = text.includes("instagram.com/reel/") || text.includes("instagram.com/p/") || text.includes("instagram.com/tv/");
+      const isLink = text.startsWith("http://") || text.startsWith("https://");
       
       if (isReel || isYouTube || isLink) {
          e.preventDefault();
          updateUi({ isAILoading: true });
          showToast(isReel ? "Capturing Reel..." : isYouTube ? "Capturing YouTube..." : "Capturing link...");
          
-         const tempId = `temp-${Date.now()}`;
+         const tempId = "temp-" + Date.now();
          let newItem: BentoItem = {
              id: tempId, 
              user_id: session.user.id, 
-             workspace_id: workspace === 'team' ? teamWorkspaceId : undefined,
+             workspace_id: workspace === "team" ? teamWorkspaceId : undefined,
              creator: userName, 
-             type: isYouTube || isReel ? 'social_video' : 'link', 
+             type: isYouTube || isReel ? "social_video" : "link", 
              url: text, 
              title: isReel ? "Fetching Reel..." : isYouTube ? "Fetching YouTube..." : "Fetching Link...",
              ai_summary: undefined, 
-             sections: catType === 'folder' ? [category, isReel ? 'Instagram' : isYouTube ? 'YouTube' : 'Links'] : ['Inbox', isReel ? 'Instagram' : isYouTube ? 'YouTube' : 'Links'],
-             list_name: catType === 'list' ? category : undefined, 
+             sections: catType === "folder" ? [category, isReel ? "Instagram" : isYouTube ? "YouTube" : "Links"] : ["Inbox", isReel ? "Instagram" : isYouTube ? "YouTube" : "Links"],
+             list_name: catType === "list" ? category : undefined, 
              created_at: new Date().toISOString() 
          };
 
          setItems(prev => [newItem, ...prev]);
 
-         if (isReel && !folders.includes('Instagram')) {
-             setCustomFolders(p => [...new Set([...p, 'Instagram'])]);
+         if (isReel && !folders.includes("Instagram")) {
+             setCustomFolders(p => [...new Set([...p, "Instagram"])]);
          }
-         if (isYouTube && !folders.includes('YouTube')) {
-             setCustomFolders(p => [...new Set([...p, 'YouTube'])]);
+         if (isYouTube && !folders.includes("YouTube")) {
+             setCustomFolders(p => [...new Set([...p, "YouTube"])]);
          }
 
          try {
@@ -814,20 +869,20 @@ export default function BrainboardBalanced() {
 
              if (isYouTube && youtubeId) {
                  try {
-                     const ytRes = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(text)}`);
+                     const ytRes = await fetch("/api/microlink?url=" + encodeURIComponent(text));
                      if (ytRes.ok) {
                          const ytData = await ytRes.json();
                          fetchedTitle = ytData.title || "YouTube Video";
                          fetchedDescription = ytData.author_name || null; 
-                         fetchedThumbnail = ytData.thumbnail_url || `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`;
+                         fetchedThumbnail = ytData.thumbnail_url || ("https://i.ytimg.com/vi/" + youtubeId + "/hqdefault.jpg");
                      } else { 
-                         fetchedThumbnail = `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`; 
+                         fetchedThumbnail = "https://i.ytimg.com/vi/" + youtubeId + "/hqdefault.jpg"; 
                      }
                  } catch (ytErr) { 
-                     fetchedThumbnail = `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`; 
+                     fetchedThumbnail = "https://i.ytimg.com/vi/" + youtubeId + "/hqdefault.jpg"; 
                  }
              } else {
-                 const res = await fetch(`/api/microlink?url=${encodeURIComponent(text)}`);
+                 const res = await fetch("/api/microlink?url=" + encodeURIComponent(text));
                  const data = await res.json();
                  const info = data.data || data; 
                  fetchedTitle = info.title || fetchedTitle;
@@ -837,9 +892,9 @@ export default function BrainboardBalanced() {
 
              const dbPayload: any = {
                  user_id: session.user.id, 
-                 workspace_id: workspace === 'team' ? teamWorkspaceId : null, 
+                 workspace_id: workspace === "team" ? teamWorkspaceId : null, 
                  creator: userName,
-                 type: isYouTube || isReel ? 'social_video' : 'link', 
+                 type: isYouTube || isReel ? "social_video" : "link", 
                  url: text, 
                  title: fetchedTitle, 
                  content: fetchedDescription, 
@@ -854,7 +909,7 @@ export default function BrainboardBalanced() {
                  }
              });
 
-             const { data: dbData, error } = await supabase.from('assets').insert([dbPayload]).select().single();
+             const { data: dbData, error } = await supabase.from("assets").insert([dbPayload]).select().single();
              
              if (dbData) {
                  setItems(prev => prev.map(i => i.id === tempId ? dbData : i));
@@ -866,15 +921,15 @@ export default function BrainboardBalanced() {
          } catch (err) {
              const fallbackPayload = {
                  user_id: session.user.id, 
-                 workspace_id: workspace === 'team' ? teamWorkspaceId : null,
+                 workspace_id: workspace === "team" ? teamWorkspaceId : null,
                  creator: userName, 
-                 type: isYouTube || isReel ? 'social_video' : 'link', 
+                 type: isYouTube || isReel ? "social_video" : "link", 
                  url: text, 
                  title: "Saved Link", 
                  sections: newItem.sections,
-                 thumbnail_url: isYouTube && youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null
+                 thumbnail_url: isYouTube && youtubeId ? ("https://i.ytimg.com/vi/" + youtubeId + "/hqdefault.jpg") : null
              };
-             const { data: dbData } = await supabase.from('assets').insert([fallbackPayload]).select().single();
+             const { data: dbData } = await supabase.from("assets").insert([fallbackPayload]).select().single();
              if (dbData) {
                  setItems(prev => prev.map(i => i.id === tempId ? dbData : i));
              } else {
@@ -885,8 +940,8 @@ export default function BrainboardBalanced() {
          }
       }
     };
-    window.addEventListener('paste', handleGlobalPaste);
-    return () => window.removeEventListener('paste', handleGlobalPaste);
+    window.addEventListener("paste", handleGlobalPaste);
+    return () => window.removeEventListener("paste", handleGlobalPaste);
   }, [session, teamWorkspaceId, updateUi, setItems, setCustomFolders, showToast]);
 
   const monthStart = startOfMonth(nav.currentDate);
@@ -895,16 +950,17 @@ export default function BrainboardBalanced() {
   const endDate = endOfWeek(monthEnd);
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
 
-  const currentAvatar = session?.user?.user_metadata?.avatar_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${session?.user?.email || 'default'}`;
+  const defaultAvatarFallback = "https://api.dicebear.com/9.x/shapes/svg?seed=" + (session?.user?.email || "default");
+  const currentAvatar = session?.user?.user_metadata?.avatar_url || defaultAvatarFallback;
   const userDisplayName = cleanName(session?.user?.user_metadata?.display_name || session?.user?.email);
-  const userHandle = session?.user?.user_metadata?.username ? `@${session.user.user_metadata.username}` : cleanName(session?.user?.email);
+  const userHandle = session?.user?.user_metadata?.username ? ("@" + session.user.user_metadata.username) : cleanName(session?.user?.email);
 
   const getCategoryTitle = () => {
-    if (nav.categoryType === 'trash') return 'Trash';
-    if (nav.categoryType === 'pinned') return 'Pinned';
-    if ((nav.categoryType as any) === 'hashtags') return 'Hashtags';
-    if (nav.categoryType === 'tag') return `#${nav.category}`;
-    if (nav.category === 'All') return 'Everything';
+    if (nav.categoryType === "trash") return "Trash";
+    if (nav.categoryType === "pinned") return "Pinned";
+    if ((nav.categoryType as any) === "hashtags") return "Hashtags";
+    if (nav.categoryType === "tag") return "#" + nav.category;
+    if (nav.category === "All") return "Everything";
     return nav.category.charAt(0).toUpperCase() + nav.category.slice(1);
   };
 
@@ -918,7 +974,7 @@ export default function BrainboardBalanced() {
 
   if (!session) {
       return (
-        <div className={`relative h-screen w-full bg-[#000000] text-white overflow-hidden selection:bg-teal-500/30 flex flex-col items-center justify-center ${inter.className}`}>
+        <div className={"relative h-screen w-full bg-[#000000] text-white overflow-hidden selection:bg-teal-500/30 flex flex-col items-center justify-center " + inter.className}>
           <nav className="absolute top-0 w-full flex justify-between items-center px-6 md:px-12 py-8 z-50">
             <div className="font-bold text-xl md:text-2xl tracking-tighter flex items-center gap-3 drop-shadow-lg">
               <div className="w-8 h-8 md:w-10 md:h-10 bg-white/5 rounded-2xl flex items-center justify-center backdrop-blur-xl border border-white/10 shadow-xl">
@@ -942,13 +998,13 @@ export default function BrainboardBalanced() {
                 transition={{ duration: 0.7, delay: 0.1 }} 
                 className="text-7xl md:text-8xl lg:text-[8rem] font-black tracking-tighter mb-10 leading-[0.95] w-full drop-shadow-2xl"
             >
-                Curate your <span className="text-transparent bg-clip-text bg-gradient-to-br from-teal-400 to-emerald-600">mind.</span>
+                Curate your <span className="text-transparent bg-clip-text bg-linear-to-br from-teal-400 to-emerald-600">mind.</span>
             </motion.h1>
             <motion.button 
                 whileHover={bounceHover} 
                 whileTap={bounceTap} 
                 onClick={handleGoogleLogin} 
-                className={`group bg-white text-black text-base md:text-lg font-black px-10 py-4 md:px-12 md:py-5 rounded-[3rem] transition-all flex items-center gap-3 shadow-[0_0_60px_rgba(20,184,166,0.4)] hover:shadow-[0_0_80px_rgba(20,184,166,0.6)]`}
+                className="group bg-white text-black text-base md:text-lg font-black px-10 py-4 md:px-12 md:py-5 rounded-[3rem] transition-all flex items-center gap-3 shadow-[0_0_60px_rgba(20,184,166,0.4)] hover:shadow-[0_0_80px_rgba(20,184,166,0.6)]"
             >
                 Authenticate Securely <ChevronRight className="group-hover:translate-x-1 transition-transform" />
             </motion.button>
@@ -960,18 +1016,11 @@ export default function BrainboardBalanced() {
   return (
     <div className={`flex h-screen w-full p-0 md:p-3 lg:p-4 gap-4 relative transition-colors duration-700 overflow-hidden ${theme.bg} ${theme.text} selection:bg-teal-500/30 ${inter.className}`}>
       
-      <style dangerouslySetInnerHTML={{__html: `
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.1); border-radius: 10px; transition: all 0.3s; }
-        .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.3); }
-        @keyframes shimmer { 100% { transform: translateX(100%); } }
-        .animate-shimmer { animation: shimmer 2s infinite linear; }
-      `}} />
+      <style dangerouslySetInnerHTML={{__html: INJECTED_CSS}} />
 
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-[0.02] mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
+      <div className="fixed inset-0 z-0 pointer-events-none opacity-[0.02] mix-blend-overlay bg-stone-500" />
 
-      <Toaster theme={isDark ? 'dark' : 'light'} position="bottom-right" style={{ zIndex: 99999 }} />
+      <Toaster theme={isDark ? "dark" : "light"} position="bottom-right" style={{ zIndex: 99999 }} />
       
       <AnimatePresence>
          {ui.isSaving && (
@@ -980,7 +1029,7 @@ export default function BrainboardBalanced() {
                animate={{ y: 0, opacity: 1 }} 
                exit={{ y: 20, opacity: 0 }} 
                style={{ zIndex: 9999 }}
-               className={`fixed bottom-24 md:bottom-10 left-1/2 md:left-10 -translate-x-1/2 md:translate-x-0 flex items-center gap-3 px-5 py-3 rounded-full shadow-2xl border backdrop-blur-3xl ${isDark ? 'bg-[#0E0E12]/90 border-white/10' : 'bg-white/90 border-stone-200'}`}
+               className={`fixed bottom-24 md:bottom-10 left-1/2 md:left-10 -translate-x-1/2 md:translate-x-0 flex items-center gap-3 px-5 py-3 rounded-full shadow-2xl border backdrop-blur-3xl ${isDark ? "bg-[#0E0E12]/90 border-white/10" : "bg-white/90 border-stone-200"}`}
             >
                <span className="flex items-center gap-2 text-[10px] font-bold text-teal-500 uppercase tracking-widest">
                    <Loader2 size={14} strokeWidth={2} className="animate-spin"/> Saving
@@ -1001,7 +1050,7 @@ export default function BrainboardBalanced() {
           open={cmdKOpen} 
           onOpenChange={setCmdKOpen} 
           label="Global Command Menu" 
-          className={`fixed top-[20%] left-1/2 transform -translate-x-1/2 w-[90%] md:w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden backdrop-blur-3xl border ${isDark ? 'bg-[#0E0E12]/80 border-white/10' : 'bg-white/80 border-black/5'}`} 
+          className={`fixed top-[20%] left-1/2 transform -translate-x-1/2 w-[90%] md:w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden backdrop-blur-3xl border ${isDark ? "bg-[#0E0E12]/80 border-white/10" : "bg-white/80 border-black/5"}`} 
           style={{ zIndex: 9999 }}
       >
          <Command.Input placeholder="Type a command or search..." className="w-full p-6 bg-transparent outline-none text-xl font-medium text-zinc-900 dark:text-zinc-100 border-b border-black/5 dark:border-white/5" />
@@ -1019,10 +1068,10 @@ export default function BrainboardBalanced() {
                </Command.Item>
             </Command.Group>
             <Command.Group heading="Navigation" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 p-2 mt-4">
-               <Command.Item onSelect={() => { updateNav({ workspace: 'personal' }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { updateNav({ workspace: "personal" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    <Users size={18} /> Switch to Personal Workspace
                </Command.Item>
-               <Command.Item onSelect={() => { updateNav({ workspace: 'team' }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { updateNav({ workspace: "team" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    <Users size={18} /> Switch to Team Workspace
                </Command.Item>
                <Command.Item onSelect={() => { toggleTheme(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
@@ -1115,7 +1164,7 @@ export default function BrainboardBalanced() {
                  className="w-full max-w-6xl aspect-video rounded-3xl overflow-hidden shadow-2xl bg-black border border-white/10" 
                  onClick={e => e.stopPropagation()}
              >
-                <iframe src={`https://www.youtube.com/embed/${playingYouTubeId}?autoplay=1&rel=0`} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                <iframe src={"https://www.youtube.com/embed/" + playingYouTubeId + "?autoplay=1&rel=0"} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
              </motion.div>
            </motion.div>
         )}
@@ -1129,18 +1178,18 @@ export default function BrainboardBalanced() {
          </div>
 
          <div className="px-4 mb-4 mt-6">
-            <div className={`relative flex items-center p-1 rounded-xl shadow-inner ${isDark ? 'bg-[#000000] border border-white/5' : 'bg-black/5 border border-black/5'}`}>
+            <div className={`relative flex items-center p-1 rounded-xl shadow-inner ${isDark ? "bg-[#000000] border border-white/5" : "bg-black/5 border border-black/5"}`}>
                <motion.div 
                    layoutId="workspace-pill-desktop" 
-                   className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm border ${isDark ? 'bg-zinc-800 border-white/5' : 'bg-white border-[#e8e4dc]'}`} 
+                   className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm border ${isDark ? "bg-zinc-800 border-white/5" : "bg-white border-[#e8e4dc]"}`} 
                    initial={false} 
-                   animate={{ left: nav.workspace === 'personal' ? '4px' : 'calc(50%)' }} 
+                   animate={{ left: nav.workspace === "personal" ? "4px" : "calc(50%)" }} 
                    transition={modalSpring} 
                />
-               <button onClick={() => { updateNav({ workspace: 'personal', viewMode: 'grid' }); updateUi({ isChatOpen: false }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === 'personal' ? 'text-teal-600 dark:text-teal-400' : theme.textMuted}`}>
+               <button onClick={() => { updateNav({ workspace: "personal", viewMode: "grid" }); updateUi({ isChatOpen: false }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === "personal" ? "text-teal-600 dark:text-teal-400" : theme.textMuted}`}>
                    Personal
                </button>
-               <button onClick={() => { updateNav({ workspace: 'team', viewMode: 'grid' }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === 'team' ? 'text-teal-600 dark:text-teal-400' : theme.textMuted}`}>
+               <button onClick={() => { updateNav({ workspace: "team", viewMode: "grid" }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === "team" ? "text-teal-600 dark:text-teal-400" : theme.textMuted}`}>
                    Team
                </button>
             </div>
@@ -1159,7 +1208,7 @@ export default function BrainboardBalanced() {
                <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} px-3 mb-2 opacity-70`}>Content</h4>
                <div className="space-y-0.5">
                  <SidebarItem icon={<FileText size={16} strokeWidth={1.5}/>} label="Notes" active={nav.categoryType === "type" && nav.category === "notes"} onClick={() => updateNav({ categoryType: "type", category: "notes" })} theme={theme} isDark={isDark} />
-                 <SidebarItem icon={<Globe size={16} strokeWidth={1.5}/>} label="Links & Docs" active={nav.categoryType === "type" && nav.category === "links"} onClick={() => updateNav({ categoryType: "type", category: "links" })} theme={theme} isDark={isDark} />
+                 <SidebarItem icon={<Globe size={16} strokeWidth={1.5}/>} label="Links" active={nav.categoryType === "type" && nav.category === "links"} onClick={() => updateNav({ categoryType: "type", category: "links" })} theme={theme} isDark={isDark} />
                  <SidebarItem icon={<ImageIcon size={16} strokeWidth={1.5}/>} label="Media" active={nav.categoryType === "type" && nav.category === "media"} onClick={() => updateNav({ categoryType: "type", category: "media" })} theme={theme} isDark={isDark} />
                  <SidebarItem icon={<Hash size={16} strokeWidth={1.5}/>} label="Hashtags" active={(nav.categoryType as any) === "hashtags" || nav.categoryType === "tag"} onClick={() => updateNav({ categoryType: "hashtags" as any, category: "All" })} theme={theme} isDark={isDark} />
                </div>
@@ -1176,7 +1225,7 @@ export default function BrainboardBalanced() {
                </div>
                <div className="space-y-0.5">
                   {sidebar.isCreatingList && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
                       <ListIcon size={14} strokeWidth={1.5} className="text-teal-500" />
                       <input 
                           autoFocus 
@@ -1184,8 +1233,8 @@ export default function BrainboardBalanced() {
                           value={sidebar.newListName} 
                           onChange={e => updateSidebar({ newListName: e.target.value })} 
                           onKeyDown={e => { 
-                              if (e.key === 'Enter') { setCustomLists(p => [...p, sidebar.newListName]); updateSidebar({ isCreatingList: false, newListName: "" }); } 
-                              if (e.key === 'Escape') updateSidebar({ isCreatingList: false }); 
+                              if (e.key === "Enter") { setCustomLists(p => [...p, sidebar.newListName]); updateSidebar({ isCreatingList: false, newListName: "" }); } 
+                              if (e.key === "Escape") updateSidebar({ isCreatingList: false }); 
                           }} 
                           onBlur={() => { 
                               if (sidebar.newListName) setCustomLists(p => [...p, sidebar.newListName]); 
@@ -1201,11 +1250,11 @@ export default function BrainboardBalanced() {
                          key={list} 
                          icon={<ListIcon size={16} strokeWidth={1.5}/>} 
                          label={list} 
-                         active={nav.categoryType === 'list' && nav.category === list} 
+                         active={nav.categoryType === "list" && nav.category === list} 
                          theme={theme} 
                          isDark={isDark} 
                          canModify={canModifyStructure} 
-                         onClick={() => updateNav({ categoryType: 'list', category: list })} 
+                         onClick={() => updateNav({ categoryType: "list", category: list })} 
                          onRename={(oldN: string, newN: string) => handleRenameList(oldN, newN)} 
                          onDelete={() => handleDeleteList(list)} 
                          onMoveUp={() => setListOrder(prev => moveArrayItem(prev, index, -1))} 
@@ -1226,7 +1275,7 @@ export default function BrainboardBalanced() {
                </div>
                <div className="space-y-0.5">
                   {sidebar.isCreatingFolder && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
                       <Folder size={14} strokeWidth={1.5} className="text-teal-500" />
                       <input 
                           autoFocus 
@@ -1234,8 +1283,8 @@ export default function BrainboardBalanced() {
                           value={sidebar.newFolderName} 
                           onChange={e => updateSidebar({ newFolderName: e.target.value })} 
                           onKeyDown={e => { 
-                              if (e.key === 'Enter') { setCustomFolders(p => [...p, sidebar.newFolderName]); updateSidebar({ isCreatingFolder: false, newFolderName: "" }); } 
-                              if (e.key === 'Escape') updateSidebar({ isCreatingFolder: false }); 
+                              if (e.key === "Enter") { setCustomFolders(p => [...p, sidebar.newFolderName]); updateSidebar({ isCreatingFolder: false, newFolderName: "" }); } 
+                              if (e.key === "Escape") updateSidebar({ isCreatingFolder: false }); 
                           }} 
                           onBlur={() => { 
                               if (sidebar.newFolderName) setCustomFolders(p => [...p, sidebar.newFolderName]); 
@@ -1251,11 +1300,11 @@ export default function BrainboardBalanced() {
                          key={folder} 
                          icon={<Folder size={16} strokeWidth={1.5}/>} 
                          label={folder} 
-                         active={nav.categoryType === 'folder' && nav.category === folder} 
+                         active={nav.categoryType === "folder" && nav.category === folder} 
                          theme={theme} 
                          isDark={isDark} 
                          canModify={canModifyStructure} 
-                         onClick={() => updateNav({ categoryType: 'folder', category: folder })} 
+                         onClick={() => updateNav({ categoryType: "folder", category: folder })} 
                          onRename={(oldN: string, newN: string) => handleRenameFolder(oldN, newN)} 
                          onDelete={() => handleDeleteFolder(folder)} 
                          onMoveUp={() => setFolderOrder(prev => moveArrayItem(prev, index, -1))} 
@@ -1269,7 +1318,7 @@ export default function BrainboardBalanced() {
 
          <div className="p-4 mt-auto border-t border-white/5">
            <button onClick={() => updateUi({ isAccountOpen: true })} className={`flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-2xl transition-all cursor-pointer active:scale-95 ${theme.btnGhost}`}>
-             <img src={currentAvatar} className={`w-9 h-9 rounded-full object-cover shadow-sm ring-2 ${isDark ? 'ring-white/10' : 'ring-[#e8e4dc]'}`} alt="Avatar" />
+             <img src={currentAvatar} className={`w-9 h-9 rounded-full object-cover shadow-sm ring-2 ${isDark ? "ring-white/10" : "ring-[#e8e4dc]"}`} alt="Avatar" />
              <div className="flex-1 min-w-0">
                <h3 className="font-bold text-sm tracking-tight truncate leading-tight">{userDisplayName}</h3>
              </div>
@@ -1291,7 +1340,7 @@ export default function BrainboardBalanced() {
             className="fixed border border-teal-500/50 bg-teal-500/10 transition-none pointer-events-none rounded-lg backdrop-blur-sm"
             style={{ 
                 zIndex: 9999,
-                display: lasso.active ? 'block' : 'none',
+                display: lasso.active ? "block" : "none",
                 left: Math.min(lasso.startX, lasso.currentX), 
                 top: Math.min(lasso.startY, lasso.currentY), 
                 width: Math.abs(lasso.currentX - lasso.startX), 
@@ -1303,34 +1352,34 @@ export default function BrainboardBalanced() {
         <AnimatePresence>
            {isSelectMode && (
               <motion.div 
-                 initial={{ y: 100, opacity: 0, x: '-50%' }} 
-                 animate={{ y: 0, opacity: 1, x: '-50%' }} 
-                 exit={{ y: 100, opacity: 0, x: '-50%' }}
+                 initial={{ y: 100, opacity: 0, x: "-50%" }} 
+                 animate={{ y: 0, opacity: 1, x: "-50%" }} 
+                 exit={{ y: 100, opacity: 0, x: "-50%" }}
                  className="fixed bottom-20 md:bottom-10 left-1/2 flex items-center gap-2 md:gap-3 px-3 py-3 rounded-full shadow-2xl border backdrop-blur-3xl bg-[#1C1C1E]/95 border-white/10 w-[90%] md:w-auto max-w-lg justify-between md:justify-start"
                  style={{ zIndex: 9999 }}
               >
                  <div className="px-2 md:px-4 border-r border-white/10 flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-3 shrink-0">
                     <span className="text-white text-xs md:text-sm font-black tracking-tight">{selectedItems.size} <span className="text-zinc-400 font-bold hidden sm:inline">Selected</span></span>
                     <button onClick={handleSelectAll} className="text-[9px] md:text-[10px] text-teal-400 font-bold uppercase tracking-widest hover:text-teal-300">
-                       {selectedItems.size === filteredData.length ? 'Deselect All' : 'Select All'}
+                       {selectedItems.size === filteredData.length ? "Deselect All" : "Select All"}
                     </button>
                  </div>
 
                  <div className="flex items-center gap-1 md:gap-2 flex-1 justify-end">
-                   {nav.categoryType === 'trash' ? (
+                   {nav.categoryType === "trash" ? (
                       <>
                          <button onClick={() => { bulkRestoreFromTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-emerald-400 hover:bg-white/10 transition-colors">
                             <RotateCcw size={14} /> <span className="hidden sm:inline">Restore</span>
                          </button>
-                         <button onClick={() => { if(window.confirm('Delete these items forever?')) { bulkHardDelete(Array.from(selectedItems)); setSelectedItems(new Set()); } }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-red-400 hover:bg-white/10 transition-colors">
+                         <button onClick={() => { if(window.confirm("Delete these items forever?")) { bulkHardDelete(Array.from(selectedItems)); setSelectedItems(new Set()); } }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-red-400 hover:bg-white/10 transition-colors">
                             <Trash2 size={14} /> <span className="hidden sm:inline">Delete</span>
                          </button>
                       </>
                    ) : (
                       <>
                          <div className="relative group">
-                            <select onChange={(e) => { bulkMoveToFolder(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                               <option value="" disabled selected>Select Folder</option>
+                            <select defaultValue="" onChange={(e) => { bulkMoveToFolder(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                               <option value="" disabled>Select Folder</option>
                                {customFolders.map(f => <option key={f} value={f}>{f}</option>)}
                             </select>
                             <button className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-zinc-300 hover:bg-white/10 transition-colors">
@@ -1338,8 +1387,8 @@ export default function BrainboardBalanced() {
                             </button>
                          </div>
                          <div className="relative group">
-                            <select onChange={(e) => { bulkMoveToList(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                               <option value="" disabled selected>Select List</option>
+                            <select defaultValue="" onChange={(e) => { bulkMoveToList(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                               <option value="" disabled>Select List</option>
                                {customLists.map(l => <option key={l} value={l}>{l}</option>)}
                             </select>
                             <button className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-zinc-300 hover:bg-white/10 transition-colors">
@@ -1382,15 +1431,15 @@ export default function BrainboardBalanced() {
             
             <div className="relative group flex-1">
               <Search className={`absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors ${theme.textMuted} group-focus-within:text-teal-500`} />
-              <input type="text" placeholder={`Search your mind...`} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`w-full py-3 pl-12 pr-12 text-sm font-medium outline-none transition-all rounded-2xl ${theme.input} leading-normal`} />
+              <input type="text" placeholder="Search your mind..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`w-full py-3 pl-12 pr-12 text-sm font-medium outline-none transition-all rounded-2xl ${theme.input} leading-normal`} />
               <div className="absolute right-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-1 opacity-50">
                   <CmdIcon size={12} /><span className="text-[10px] font-bold font-mono">K</span>
               </div>
             </div>
 
-            <div className={`hidden md:flex items-center p-1 border shadow-sm rounded-xl ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
+            <div className={`hidden md:flex items-center p-1 border shadow-sm rounded-xl ${isDark ? "bg-[#18181B] border-white/5" : "bg-white border-black/5"}`}>
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="Masonry Grid" onClick={() => updateNav({ viewMode: 'grid' })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === 'grid' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                 <button aria-label="Masonry Grid" onClick={() => updateNav({ viewMode: "grid" })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "grid" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
                      <Columns size={18} strokeWidth={1.5} />
                  </button>
                  <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
@@ -1399,7 +1448,7 @@ export default function BrainboardBalanced() {
                </div>
                
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="Uniform Cards" onClick={() => updateNav({ viewMode: 'card' })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === 'card' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                 <button aria-label="Uniform Cards" onClick={() => updateNav({ viewMode: "card" })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "card" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
                      <LayoutGrid size={18} strokeWidth={1.5} />
                  </button>
                  <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
@@ -1408,7 +1457,7 @@ export default function BrainboardBalanced() {
                </div>
                
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="List View" onClick={() => updateNav({ viewMode: 'list' })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === 'list' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                 <button aria-label="List View" onClick={() => updateNav({ viewMode: "list" })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "list" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
                      <AlignJustify size={18} strokeWidth={1.5} />
                  </button>
                  <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
@@ -1417,7 +1466,7 @@ export default function BrainboardBalanced() {
                </div>
                
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="Calendar View" onClick={() => updateNav({ viewMode: 'calendar' })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === 'calendar' ? (isDark ? 'bg-white/10 text-teal-400 shadow-sm' : 'bg-black/5 text-teal-600 shadow-sm') : theme.textMuted}`}>
+                 <button aria-label="Calendar View" onClick={() => updateNav({ viewMode: "calendar" })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "calendar" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
                      <CalendarIcon size={18} strokeWidth={1.5} />
                  </button>
                  <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
@@ -1429,7 +1478,7 @@ export default function BrainboardBalanced() {
           
           <div className="flex items-center gap-3 shrink-0 z-50">
             <div className="relative group/tooltip flex items-center justify-center">
-               <button aria-label="Manual Sync" onClick={() => fetchItems(1, false)} className={`p-3 transition-all active:scale-95 shadow-sm rounded-xl ${isDark ? 'bg-[#18181B] border border-white/5 text-teal-400 hover:bg-white/10' : 'bg-white border border-black/5 text-teal-600 hover:bg-black/5'}`}>
+               <button aria-label="Manual Sync" onClick={() => fetchItems(1, false)} className={`p-3 transition-all active:scale-95 shadow-sm rounded-xl ${isDark ? "bg-[#18181B] border border-white/5 text-teal-400 hover:bg-white/10" : "bg-white border border-black/5 text-teal-600 hover:bg-black/5"}`}>
                   <RefreshCw size={18} strokeWidth={2} className={ui.isSyncing ? "animate-spin" : ""} />
                </button>
                <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
@@ -1440,11 +1489,11 @@ export default function BrainboardBalanced() {
             <ThemeToggle isDark={isDark} toggle={toggleTheme} />
 
             <AnimatePresence>
-               {nav.workspace === 'team' && (
+               {nav.workspace === "team" && (
                  <>
                    <div className="relative group/tooltip hidden md:flex items-center justify-center">
-                      <button aria-label="Team Chat" onClick={() => updateUi({ isChatOpen: !ui.isChatOpen })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${ui.isChatOpen ? 'bg-teal-500 text-white border border-teal-600' : (isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5')}`}>
-                         <MessageSquare size={18} strokeWidth={ui.isChatOpen ? 2 : 1.5} className={ui.isChatOpen ? 'text-white' : theme.textMuted} />
+                      <button aria-label="Team Chat" onClick={() => updateUi({ isChatOpen: !ui.isChatOpen })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${ui.isChatOpen ? "bg-teal-500 text-white border border-teal-600" : (isDark ? "bg-[#18181B] border border-white/5 hover:bg-zinc-800" : "bg-white border border-black/5 hover:bg-black/5")}`}>
+                         <MessageSquare size={18} strokeWidth={ui.isChatOpen ? 2 : 1.5} className={ui.isChatOpen ? "text-white" : theme.textMuted} />
                       </button>
                       <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                           Team Chat
@@ -1452,7 +1501,7 @@ export default function BrainboardBalanced() {
                    </div>
 
                    <div className="relative">
-                      <button aria-label="Notifications" onClick={() => updateUi({ showNotifications: !ui.showNotifications })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${isDark ? 'bg-[#18181B] border border-white/5 hover:bg-zinc-800' : 'bg-white border border-black/5 hover:bg-black/5'}`}>
+                      <button aria-label="Notifications" onClick={() => updateUi({ showNotifications: !ui.showNotifications })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${isDark ? "bg-[#18181B] border border-white/5 hover:bg-zinc-800" : "bg-white border border-black/5 hover:bg-black/5"}`}>
                          <Bell size={18} strokeWidth={1.5} className={theme.textMuted} />
                          {notifications.some(n => !n.read) && <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-[#18181B] dark:border-zinc-900" />}
                       </button>
@@ -1460,7 +1509,7 @@ export default function BrainboardBalanced() {
                          {ui.showNotifications && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => updateUi({ showNotifications: false })} />
-                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-72 md:w-80 z-50 shadow-2xl border backdrop-blur-3xl p-2 rounded-3xl ${isDark ? 'bg-zinc-900/95 border-zinc-800' : 'bg-white/95 border-[#e8e4dc]'}`}>
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-72 md:w-80 z-50 shadow-2xl border backdrop-blur-3xl p-2 rounded-3xl ${isDark ? "bg-zinc-900/95 border-zinc-800" : "bg-white/95 border-[#e8e4dc]"}`}>
                                  <div className="p-4 border-b border-black/5 dark:border-white/5 mb-2 flex items-center justify-between">
                                     <h4 className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>Notifications</h4>
                                     {notifications.some(n => !n.read) && (
@@ -1471,7 +1520,7 @@ export default function BrainboardBalanced() {
                                     {notifications.length === 0 ? (
                                        <div className="p-6 text-center text-sm text-stone-500">No new notifications.</div>
                                     ) : notifications.map(n => (
-                                       <div key={n.id} onClick={() => handleMarkAsRead(n.id)} className={`p-4 transition-colors cursor-pointer group rounded-2xl ${n.read ? 'opacity-60' : (isDark ? 'bg-white/5' : 'bg-black/5')} hover:bg-teal-500/10 relative`}>
+                                       <div key={n.id} onClick={() => handleMarkAsRead(n.id)} className={`p-4 transition-colors cursor-pointer group rounded-2xl ${n.read ? "opacity-60" : (isDark ? "bg-white/5" : "bg-black/5")} hover:bg-teal-500/10 relative`}>
                                           <p className={`text-sm font-medium leading-snug mb-1.5 pr-6 ${theme.text}`}>{n.text}</p>
                                           <p className="text-[10px] font-bold text-teal-500 uppercase tracking-widest">{formatDistanceToNow(n.time)} ago</p>
                                           {!n.read && <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100"><CheckCircle size={18} className="text-teal-500" /></div>}
@@ -1485,10 +1534,10 @@ export default function BrainboardBalanced() {
                    </div>
 
                    <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="relative hidden md:block">
-                      <button aria-label="Team Presence" onClick={() => updateUi({ showTeamPresence: !ui.showTeamPresence })} className={`flex items-center p-1.5 shadow-md cursor-pointer active:scale-95 hover:shadow-lg transition-all border rounded-xl ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
+                      <button aria-label="Team Presence" onClick={() => updateUi({ showTeamPresence: !ui.showTeamPresence })} className={`flex items-center p-1.5 shadow-md cursor-pointer active:scale-95 hover:shadow-lg transition-all border rounded-xl ${isDark ? "bg-[#18181B] border-white/5" : "bg-white border-black/5"}`}>
                         <div className="flex -space-x-2 pl-1.5">
                           {teamMembers.filter(m => m.inWorkspace).slice(0, 3).map((member, i) => (
-                             <img key={i} className={`inline-block h-8 w-8 rounded-full ring-2 object-cover ${isDark ? 'ring-[#18181B]' : 'ring-white'}`} src={member.avatar} alt=""/>
+                             <img key={i} className={`inline-block h-8 w-8 rounded-full ring-2 object-cover ${isDark ? "ring-[#18181B]" : "ring-white"}`} src={member.avatar} alt=""/>
                           ))}
                         </div>
                         <div className="px-4 flex items-center gap-1.5 text-xs font-bold text-stone-500 uppercase tracking-widest"><Users size={14} strokeWidth={2}/> Team</div>
@@ -1497,20 +1546,20 @@ export default function BrainboardBalanced() {
                          {ui.showTeamPresence && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => updateUi({ showTeamPresence: false })} />
-                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-80 z-50 shadow-2xl border backdrop-blur-3xl flex flex-col overflow-hidden rounded-3xl ${isDark ? 'bg-zinc-900/95 border-zinc-800' : 'bg-white/95 border-[#e8e4dc]'}`}>
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-80 z-50 shadow-2xl border backdrop-blur-3xl flex flex-col overflow-hidden rounded-3xl ${isDark ? "bg-zinc-900/95 border-zinc-800" : "bg-white/95 border-[#e8e4dc]"}`}>
                                  <div className="flex flex-col gap-1 max-h-80 overflow-y-auto custom-scrollbar p-2">
                                     
                                     <div className="px-3 pt-3 pb-2">
                                        <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted}`}>Online Now</h4>
                                     </div>
                                     <div className="flex flex-col gap-1 px-1">
-                                       {teamMembers.filter(m => m.inWorkspace && m.status === 'online').length === 0 ? (
+                                       {teamMembers.filter(m => m.inWorkspace && m.status === "online").length === 0 ? (
                                           <div className="px-3 py-2 text-sm text-stone-500 font-medium">No one online.</div>
                                        ) : (
-                                          teamMembers.filter(m => m.inWorkspace && m.status === 'online').map(member => (
+                                          teamMembers.filter(m => m.inWorkspace && m.status === "online").map(member => (
                                              <div key={member.id} className="flex items-center justify-between gap-3 w-full px-3 py-2 bg-black/5 dark:bg-white/5 rounded-2xl">
                                                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                   <img src={member.avatar} className="w-8 h-8 rounded-full object-cover shadow-sm shrink-0" />
+                                                    <img src={member.avatar} className="w-8 h-8 rounded-full object-cover shadow-sm shrink-0" alt="avatar" />
                                                    <span className={`text-sm font-bold truncate ${theme.text}`}>{cleanName(member.name)}</span>
                                                 </div>
                                                 <Circle size={10} className="fill-emerald-500 text-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.8)] rounded-full shrink-0" />
@@ -1519,16 +1568,16 @@ export default function BrainboardBalanced() {
                                        )}
                                     </div>
 
-                                    <div className={`mt-2 mb-1 border-t mx-3 ${isDark ? 'border-white/10' : 'border-black/5'}`} />
+                                    <div className={`mt-2 mb-1 border-t mx-3 ${isDark ? "border-white/10" : "border-black/5"}`} />
 
                                     <div className="px-3 pt-2 pb-2">
                                        <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted}`}>Offline</h4>
                                     </div>
                                     <div className="flex flex-col gap-1 px-1 pb-2">
-                                       {teamMembers.filter(m => m.inWorkspace && m.status === 'offline').map(member => (
+                                       {teamMembers.filter(m => m.inWorkspace && m.status === "offline").map(member => (
                                           <div key={member.id} className="flex items-center justify-between gap-3 w-full px-3 py-2 opacity-60 rounded-2xl">
                                              <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                <img src={member.avatar} className="w-8 h-8 rounded-full object-cover grayscale shrink-0" />
+                                                <img src={member.avatar} className="w-8 h-8 rounded-full object-cover grayscale shrink-0" alt="avatar" />
                                                 <span className={`text-sm font-bold truncate ${theme.text}`}>{cleanName(member.name)}</span>
                                              </div>
                                              <span className="text-[10px] font-medium text-stone-500 whitespace-nowrap shrink-0">seen {formatDistanceToNow(member.lastSeen)} ago</span>
@@ -1546,7 +1595,7 @@ export default function BrainboardBalanced() {
                )}
             </AnimatePresence>
             
-            {nav.categoryType === 'trash' ? (
+            {nav.categoryType === "trash" ? (
               <button key="btn-trash" aria-label="Empty Trash" onClick={emptyTrash} className={`px-6 py-3 text-sm font-bold transition-all active:scale-95 flex items-center gap-2 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white rounded-xl`}>
                 <Trash2 size={16} strokeWidth={2} /> <span className="hidden md:inline">Empty Trash</span>
               </button>
@@ -1555,8 +1604,8 @@ export default function BrainboardBalanced() {
                 {canCreate && (
                    <>
                       <div className="relative group/tooltip flex items-center justify-center">
-                         <button aria-label="Upload Files" onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? 'bg-[#18181B] border-white/5 hover:bg-white/10' : 'bg-white border-black/5 hover:bg-black/5'}`}>
-                            <ImageIcon size={18} strokeWidth={1.5} className={isDark ? 'text-zinc-400' : 'text-zinc-600'} />
+                         <button aria-label="Upload Files" onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? "bg-[#18181B] border-white/5 hover:bg-white/10" : "bg-white border-black/5 hover:bg-black/5"}`}>
+                            <ImageIcon size={18} strokeWidth={1.5} className={isDark ? "text-zinc-400" : "text-zinc-600"} />
                          </button>
                          <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                              Upload File
@@ -1564,8 +1613,8 @@ export default function BrainboardBalanced() {
                       </div>
                       
                       <div className="relative group/tooltip flex items-center justify-center">
-                         <button aria-label="New Checklist" onClick={handleNewChecklist} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? 'bg-[#18181B] border-white/5 hover:bg-white/10' : 'bg-white border-black/5 hover:bg-black/5'}`}>
-                            <CheckSquare size={18} strokeWidth={1.5} className={isDark ? 'text-zinc-400' : 'text-zinc-600'} />
+                         <button aria-label="New Checklist" onClick={handleNewChecklist} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? "bg-[#18181B] border-white/5 hover:bg-white/10" : "bg-white border-black/5 hover:bg-black/5"}`}>
+                            <CheckSquare size={18} strokeWidth={1.5} className={isDark ? "text-zinc-400" : "text-zinc-600"} />
                          </button>
                          <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                              New Checklist
@@ -1584,7 +1633,7 @@ export default function BrainboardBalanced() {
 
         <div className="px-6 md:px-12 pb-4 pt-4 flex flex-col relative z-30 bg-transparent shrink-0">
            <div className="flex items-end justify-between">
-             {nav.viewMode === 'grid' || nav.viewMode === 'card' || nav.viewMode === 'list' ? (
+             {nav.viewMode === "grid" || nav.viewMode === "card" || nav.viewMode === "list" ? (
                 <>
                  <div>
                    <h2 className="text-4xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">
@@ -1597,15 +1646,15 @@ export default function BrainboardBalanced() {
                 </>
              ) : (
                 <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
-                  <h2 className="text-3xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">{format(nav.currentDate, 'MMMM yyyy')}</h2>
-                  <div className={`flex items-center gap-1 border p-1 shadow-md backdrop-blur-md rounded-full ${isDark ? 'bg-zinc-900/50 border-zinc-800/80' : 'bg-white border-stone-200'}`}>
-                     <button aria-label="Previous Month" onClick={() => updateNav({ currentDate: subMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-full ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
+                  <h2 className="text-3xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">{format(nav.currentDate, "MMMM yyyy")}</h2>
+                  <div className={`flex items-center gap-1 border p-1 shadow-md backdrop-blur-md rounded-full ${isDark ? "bg-zinc-900/50 border-zinc-800/80" : "bg-white border-stone-200"}`}>
+                     <button aria-label="Previous Month" onClick={() => updateNav({ currentDate: subMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-full ${isDark ? "hover:bg-zinc-800 text-zinc-100" : "hover:bg-black/5 text-stone-900"}`}>
                          <ChevronLeft size={18} strokeWidth={1.5}/>
                      </button>
-                     <button onClick={() => updateNav({ currentDate: new Date() })} className={`px-5 py-2 text-sm font-bold transition-colors active:scale-95 rounded-full ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-black/5 text-stone-500'}`}>
+                     <button onClick={() => updateNav({ currentDate: new Date() })} className={`px-5 py-2 text-sm font-bold transition-colors active:scale-95 rounded-full ${isDark ? "hover:bg-zinc-800 text-zinc-400" : "hover:bg-black/5 text-stone-500"}`}>
                          Today
                      </button>
-                     <button aria-label="Next Month" onClick={() => updateNav({ currentDate: addMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-full ${isDark ? 'hover:bg-zinc-800 text-zinc-100' : 'hover:bg-black/5 text-stone-900'}`}>
+                     <button aria-label="Next Month" onClick={() => updateNav({ currentDate: addMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-full ${isDark ? "hover:bg-zinc-800 text-zinc-100" : "hover:bg-black/5 text-stone-900"}`}>
                          <ChevronRightIcon size={18} strokeWidth={1.5}/>
                      </button>
                   </div>
@@ -1614,24 +1663,24 @@ export default function BrainboardBalanced() {
            </div>
 
            <AnimatePresence>
-              {((nav.categoryType as any) === 'hashtags' || nav.categoryType === 'tag') && (
+              {((nav.categoryType as any) === "hashtags" || nav.categoryType === "tag") && (
                  <motion.div 
                     initial={{ opacity: 0, height: 0 }} 
-                    animate={{ opacity: 1, height: 'auto' }} 
+                    animate={{ opacity: 1, height: "auto" }} 
                     exit={{ opacity: 0, height: 0 }}
-                    className={`flex flex-col gap-4 mt-6 pt-4 border-t w-full relative z-30 ${isDark ? 'border-white/5' : 'border-black/5'}`}
+                    className={`flex flex-col gap-4 mt-6 pt-4 border-t w-full relative z-30 ${isDark ? "border-white/5" : "border-black/5"}`}
                  >
-                    <div className={`relative flex items-center w-full max-w-md overflow-hidden border focus-within:border-teal-500 transition-colors shadow-md rounded-2xl ${isDark ? 'bg-[#18181B] border-white/5' : 'bg-white border-black/5'}`}>
+                    <div className={`relative flex items-center w-full max-w-md overflow-hidden border focus-within:border-teal-500 transition-colors shadow-md rounded-2xl ${isDark ? "bg-[#18181B] border-white/5" : "bg-white border-black/5"}`}>
                        <Search size={16} className={`absolute left-4 ${theme.textMuted}`} />
                        <input type="text" placeholder="Search tags..." value={tagSearchQuery} onChange={e => setTagSearchQuery(e.target.value)} className={`w-full bg-transparent border-none py-3 pl-11 pr-4 text-sm font-medium outline-none ${theme.text}`} />
                     </div>
                     
                     <div className="w-full flex flex-wrap gap-2 pt-1 pb-2">
-                       <button onClick={() => updateNav({ categoryType: 'hashtags' as any, category: 'All' })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-full ${(nav.categoryType as any) === 'hashtags' ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
+                       <button onClick={() => updateNav({ categoryType: "hashtags" as any, category: "All" })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-full ${(nav.categoryType as any) === "hashtags" ? "bg-teal-500 text-white border-teal-600 shadow-md" : (isDark ? "bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10" : "bg-white text-stone-700 border-black/5 hover:bg-black/5")}`}>
                            All Hashtags
                        </button>
                        {smartTags.filter((t: string) => t.toLowerCase().includes(tagSearchQuery.toLowerCase())).map((tag: string) => (
-                          <button key={tag} onClick={() => updateNav({ categoryType: 'tag', category: tag })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-full ${nav.categoryType === 'tag' && nav.category === tag ? 'bg-teal-500 text-white border-teal-600 shadow-md' : (isDark ? 'bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10' : 'bg-white text-stone-700 border-black/5 hover:bg-black/5')}`}>
+                          <button key={tag} onClick={() => updateNav({ categoryType: "tag", category: tag })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-full ${nav.categoryType === "tag" && nav.category === tag ? "bg-teal-500 text-white border-teal-600 shadow-md" : (isDark ? "bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10" : "bg-white text-stone-700 border-black/5 hover:bg-black/5")}`}>
                               #{tag}
                           </button>
                        ))}
@@ -1643,27 +1692,27 @@ export default function BrainboardBalanced() {
 
         <div className="flex-1 overflow-y-auto px-6 md:px-12 pb-24 md:pb-20 custom-scrollbar relative z-10 w-full">
            
-           <div className="absolute inset-0 z-0 cursor-crosshair" style={{ minHeight: '200vh' }} onPointerDown={handlePointerDown} />
+           <div className="absolute inset-0 z-0 cursor-crosshair" style={{ minHeight: "200vh" }} onPointerDown={handlePointerDown} />
            
            <div className="relative z-10">
                {isLoading && page === 1 ? (
-                  <div className={nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6 pointer-events-none" : nav.viewMode === 'list' ? "flex flex-col gap-3 pointer-events-none" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pointer-events-none"}>
+                  <div className={nav.viewMode === "grid" ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6 pointer-events-none" : nav.viewMode === "list" ? "flex flex-col gap-3 pointer-events-none" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pointer-events-none"}>
                      {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                         <div key={i} className={`border relative overflow-hidden ${theme.card} h-64 md:h-85 break-inside-avoid inline-block w-full mb-6 rounded-3xl`}>
-                           <div className={`absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent ${isDark ? 'via-white/5' : 'via-black/5'} to-transparent animate-shimmer`} />
+                           <div className={`absolute inset-0 -translate-x-full bg-linear-to-r from-transparent ${isDark ? "via-white/5" : "via-black/5"} to-transparent animate-shimmer`} />
                         </div>
                      ))}
                   </div>
-               ) : filteredData.length === 0 && (nav.viewMode === 'grid' || nav.viewMode === 'card') ? (
+               ) : filteredData.length === 0 && (nav.viewMode === "grid" || nav.viewMode === "card") ? (
                   <div className="flex-1 w-full flex flex-col items-center mt-20 text-center opacity-50 px-4 pointer-events-none">
-                     <div className={`w-full max-w-lg border border-dashed p-16 flex flex-col items-center justify-center transition-colors shadow-sm rounded-3xl ${isDark ? 'border-white/20 bg-white/5' : 'border-black/20 bg-black/5'}`}>
+                     <div className={`w-full max-w-lg border border-dashed p-16 flex flex-col items-center justify-center transition-colors shadow-sm rounded-3xl ${isDark ? "border-white/20 bg-white/5" : "border-black/20 bg-black/5"}`}>
                        <LayoutGrid size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
                        <h3 className="text-3xl font-black tracking-tight mb-2">A pristine canvas.</h3>
-                       <p className={`text-base font-medium ${theme.textMuted}`}>Drop a file anywhere, or press `Ctrl+V`.</p>
+                       <p className={`text-base font-medium ${theme.textMuted}`}>Drop a file anywhere, or press <kbd>Ctrl+V</kbd>.</p>
                      </div>
                   </div>
                   
-               ) : nav.viewMode === 'list' ? (
+               ) : nav.viewMode === "list" ? (
                   <div className="flex flex-col gap-4 pb-10 pointer-events-auto">
                      <AnimatePresence>
                         {filteredData.map((item, index) => (
@@ -1684,12 +1733,12 @@ export default function BrainboardBalanced() {
                                    onMoveToFolder={moveItemToFolder} 
                                    onMoveToList={moveItemToList} 
                                    onUpdateTags={updateItemTags} 
-                                   onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
+                                   onTagClick={(tag: string) => updateNav({ categoryType: "tag", category: tag, viewMode: "grid" })} 
                                    viewMode={nav.viewMode} 
                                    item={item} 
                                    theme={theme} 
                                    isDark={isDark} 
-                                   inTrash={nav.categoryType === 'trash'} 
+                                   inTrash={nav.categoryType === "trash"} 
                                    activeWorkspace={nav.workspace} 
                                    currentUserId={session?.user?.id} 
                                    teamRole={teamRole} 
@@ -1712,8 +1761,8 @@ export default function BrainboardBalanced() {
                      </AnimatePresence>
                   </div>
 
-               ) : nav.viewMode === 'card' || nav.viewMode === 'grid' ? (
-                 <div className={`${nav.viewMode === 'grid' ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"} pointer-events-auto`}>
+               ) : nav.viewMode === "card" || nav.viewMode === "grid" ? (
+                 <div className={`${nav.viewMode === "grid" ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"} pointer-events-auto`}>
                    <AnimatePresence>
                      {filteredData.map((item, index) => (
                           <motion.div 
@@ -1724,7 +1773,7 @@ export default function BrainboardBalanced() {
                               initial="hidden" 
                               animate="visible" 
                               exit="exit" 
-                              className={`${nav.viewMode === 'grid' ? "break-inside-avoid inline-block w-full mb-6 relative" : "h-full relative"} lasso-selectable`} 
+                              className={`${nav.viewMode === "grid" ? "break-inside-avoid inline-block w-full mb-6 relative" : "h-full relative"} lasso-selectable`} 
                               data-id={item.id}
                           >
                              <MemoizedMasonryCard 
@@ -1733,12 +1782,12 @@ export default function BrainboardBalanced() {
                                  onMoveToFolder={moveItemToFolder} 
                                  onMoveToList={moveItemToList} 
                                  onUpdateTags={updateItemTags} 
-                                 onTagClick={(tag: string) => updateNav({ categoryType: 'tag', category: tag, viewMode: 'grid' })} 
+                                 onTagClick={(tag: string) => updateNav({ categoryType: "tag", category: tag, viewMode: "grid" })} 
                                  viewMode={nav.viewMode} 
                                  item={item} 
                                  theme={theme} 
                                  isDark={isDark} 
-                                 inTrash={nav.categoryType === 'trash'} 
+                                 inTrash={nav.categoryType === "trash"} 
                                  activeWorkspace={nav.workspace} 
                                  currentUserId={session?.user?.id} 
                                  teamRole={teamRole} 
@@ -1762,13 +1811,13 @@ export default function BrainboardBalanced() {
                  </div>
 
                ) : (
-                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={modalSpring} className={`w-full overflow-hidden flex flex-col shadow-2xl border mb-10 rounded-3xl ${isDark ? 'bg-[#0E0E12] border-white/5' : 'bg-white border-black/5'} pointer-events-auto`}>
-                    <div className={`grid grid-cols-7 border-b shrink-0 ${isDark ? 'border-white/5 bg-white/5' : 'border-black/5 bg-black/5'}`}>
-                       {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={modalSpring} className={`w-full overflow-hidden flex flex-col shadow-2xl border mb-10 rounded-3xl ${isDark ? "bg-[#0E0E12] border-white/5" : "bg-white border-black/5"} pointer-events-auto`}>
+                    <div className={`grid grid-cols-7 border-b shrink-0 ${isDark ? "border-white/5 bg-white/5" : "border-black/5 bg-black/5"}`}>
+                       {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
                           <div key={day} className={`p-3 md:p-5 text-center text-[10px] md:text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{day.slice(0, 3)}</div>
                        ))}
                     </div>
-                    <div className={`grid grid-cols-7 auto-rows-fr gap-px ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
+                    <div className={`grid grid-cols-7 auto-rows-fr gap-px ${isDark ? "bg-white/5" : "bg-black/5"}`}>
                        {calendarDays.map((day, idx) => {
                           const dayItems = filteredData.filter(item => {
                               const targetDate = item.scheduled_for ? new Date(item.scheduled_for) : new Date(item.created_at || new Date());
@@ -1778,21 +1827,22 @@ export default function BrainboardBalanced() {
                           const isToday = isSameDay(day, new Date());
 
                           return (
-                            <div key={day.toString()} className={`min-h-24 md:min-h-35 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? 'bg-[#0A0A0C]' : 'bg-white') : (isDark ? 'bg-[#0A0A0C]/50 opacity-40' : 'bg-[#faf8f5] opacity-50')}`}>
-                               <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 md:h-10 flex items-center justify-center shrink-0 rounded-full ${isToday ? 'bg-teal-500 text-white shadow-lg shadow-teal-900/20' : theme.textMuted}`}>{format(day, 'd')}</div>
+                            <div key={day.toString()} className={`min-h-24 md:min-h-35 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? "bg-[#0A0A0C]" : "bg-white") : (isDark ? "bg-[#0A0A0C]/50 opacity-40" : "bg-[#faf8f5] opacity-50")}`}>
+                               <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 md:h-10 flex items-center justify-center shrink-0 rounded-full ${isToday ? "bg-teal-500 text-white shadow-lg shadow-teal-900/20" : theme.textMuted}`}>{format(day, "d")}</div>
                                <div className="flex-1 flex flex-col gap-1 md:gap-2 overflow-y-auto custom-scrollbar pr-1">
                                   {dayItems.map(item => {
-                                     const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-                                     const isYouTube = !!ytMatch;
-                                     const youtubeId = isYouTube ? ytMatch[1] : null;
+                                     let isYouTube = false;
+                                     if (item.url && (item.url.includes("youtube.com") || item.url.includes("youtu.be"))) {
+                                         isYouTube = true;
+                                     }
 
-                                     const isVideo = item.url && (item.url.includes('instagram.com') || isYouTube);
+                                     const isVideo = item.url && (item.url.includes("instagram.com") || isYouTube);
                                      const chipColor = isVideo 
-                                        ? (isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200') 
-                                        : item.type === 'note' 
-                                        ? (isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-100 text-emerald-700 border-emerald-200')
-                                        : (isDark ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-blue-100 text-blue-700 border-blue-200');
-                                     const Icon = isVideo ? Play : item.type === 'note' ? FileText : Globe;
+                                        ? (isDark ? "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20" : "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200") 
+                                        : item.type === "note" 
+                                        ? (isDark ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-emerald-100 text-emerald-700 border-emerald-200")
+                                        : (isDark ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-100 text-blue-700 border-blue-200");
+                                     const Icon = isVideo ? Play : item.type === "note" ? FileText : Globe;
                                      
                                      return (
                                         <button 
@@ -1813,14 +1863,11 @@ export default function BrainboardBalanced() {
                  </motion.div>
                )}
 
-               {hasMore && !isLoading && !debouncedSearchQuery && !isSelectMode && (
-                   <div className="w-full flex justify-center mt-12 mb-10 pointer-events-auto">
-                      <button onClick={() => { setPage(p => p+1); fetchItems(page + 1, true); }} className={`px-8 py-3 font-bold text-sm transition-all active:scale-95 border shadow-md rounded-full ${isDark ? 'bg-zinc-800 border-white/5 text-white hover:bg-zinc-700' : 'bg-white border-black/5 text-[#2d2a26] hover:bg-black/5'}`}>
-                          Load More Content
-                      </button>
+               {hasMore && !debouncedSearchQuery && !isSelectMode && (
+                   <div ref={loadMoreRef} className="w-full flex justify-center mt-12 mb-10 pointer-events-auto h-10">
+                      {isLoading && <Loader2 size={24} className={`animate-spin ${theme.textMuted}`} />}
                    </div>
                )}
-               {isLoading && page > 1 && (<div className="w-full flex justify-center mt-12 mb-10"><Loader2 size={24} className={`animate-spin ${theme.textMuted}`} /></div>)}
            </div>
          </div>
       </main>

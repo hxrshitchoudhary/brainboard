@@ -1,3 +1,5 @@
+import { Session } from '@supabase/supabase-js';
+
 export interface ItemComment {
   id: string;
   user_id: string;
@@ -11,29 +13,29 @@ export interface ItemComment {
 export interface BentoItem {
   id: string | number;
   user_id?: string;
-  workspace_id?: string;
+  workspace_id?: string | null;
   type?: string; 
   title?: string;
-  content?: string;
-  url?: string;
-  thumbnail_url?: string;
-  video_url?: string;
-  img?: string; 
+  content?: string | null;
+  url?: string | null;
+  thumbnail_url?: string | null;
+  video_url?: string | null;
+  img?: string | null; 
   is_pinned?: boolean;
-  tags?: string[];
+  tags?: string[] | null;
   section?: string;        
-  sections?: string[];   
-  list_name?: string;    
-  ai_summary?: string;   
-  color?: string;
+  sections?: string[] | null;   
+  list_name?: string | null;    
+  ai_summary?: string | null;   
+  color?: string | null;
   is_checklist?: boolean;
   checklist_items?: { id: string, text: string, checked: boolean }[];
   creator?: string;
   creator_avatar?: string;
-  likes?: string; 
-  comments?: string; 
+  likes?: string | null; 
+  comments?: string | null; 
   is_deleted?: boolean;
-  scheduled_for?: string;
+  scheduled_for?: string | null;
   updated_at?: string;
   created_at?: string;
 }

@@ -1,9 +1,10 @@
 import { useState, useCallback } from "react";
 import { supabase } from '@/lib/supabase'; 
 import { BentoItem } from "@/app/types";
+import { Session } from '@supabase/supabase-js';
 
 export function useBrainboardData(
-  session: any, 
+  session: Session | null, 
   teamWorkspaceId: string, 
   activeWorkspace: string, 
   displayName: string, 
@@ -69,7 +70,7 @@ export function useBrainboardData(
     if (noteToSave.section) newSections = Array.from(new Set([...newSections, noteToSave.section]));
 
     const payload: any = {
-      user_id: session.user.id, workspace_id: noteToSave.workspace_id || (activeWorkspace === 'team' ? teamWorkspaceId : null),
+      user_id: session?.user?.id, workspace_id: noteToSave.workspace_id || (activeWorkspace === 'team' ? teamWorkspaceId : null),
       creator: noteToSave.creator || displayName, type: noteToSave.type || 'note', title: noteToSave.title || null,
       content: noteToSave.content || null, url: noteToSave.url || null, thumbnail_url: noteToSave.thumbnail_url || null,
       video_url: noteToSave.video_url || null, img: noteToSave.img || null, is_pinned: noteToSave.is_pinned || false,
@@ -82,7 +83,9 @@ export function useBrainboardData(
     };
 
     Object.keys(payload).forEach(key => { if (payload[key] === null || payload[key] === undefined) delete payload[key]; });
-    const previousItems = [...items];
+    
+    // Store old state for this specific item just in case
+    const itemBeforeUpdate = items.find(i => i.id === noteToSave.id);
 
     try {
         if (isTemp) {
@@ -100,9 +103,11 @@ export function useBrainboardData(
             const { error } = await supabase.from('assets').update(payload).eq('id', noteToSave.id);
             
             if (error) {
-                setItems(previousItems); 
+                // Revert only this item
+                if (itemBeforeUpdate) {
+                    setItems(prev => prev.map(i => i.id === noteToSave.id ? itemBeforeUpdate : i));
+                }
                 showToast("Database Error: Failed to update item. Reverting...", true);
-                console.error(error);
             } else {
                 showToast("Updated successfully!");
             }
@@ -116,9 +121,10 @@ export function useBrainboardData(
            setCustomLists(prev => [...new Set([...prev, payload.list_name as string])]);
         }
     } catch (e) {
-        setItems(previousItems);
+        if (itemBeforeUpdate) {
+             setItems(prev => prev.map(i => i.id === noteToSave.id ? itemBeforeUpdate : i));
+        }
         showToast("Network Error: Failed to save. Reverting...", true);
-        console.error(e);
     }
   };
 
@@ -138,93 +144,94 @@ export function useBrainboardData(
   };
 
   const updateItemTags = async (id: string | number, newTags: string[]) => {
-    const previousItems = [...items];
+    const oldTags = items.find(i => i.id === id)?.tags;
     setItems(prev => prev.map(item => item.id === id ? { ...item, tags: newTags.length > 0 ? newTags : undefined } : item));
     if (!String(id).startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ tags: newTags.length > 0 ? newTags : null }).eq('id', id);
-        if (error) { setItems(previousItems); showToast("Failed to update tags.", true); }
+        if (error) { 
+            setItems(prev => prev.map(item => item.id === id ? { ...item, tags: oldTags } : item));
+            showToast("Failed to update tags.", true); 
+        }
     }
   };
 
   const moveItemToFolder = async (itemId: string | number, folderName: string) => {
-    const previousItems = [...items];
+    const oldSections = items.find(i => i.id === itemId)?.sections;
     setItems(prev => prev.map(item => item.id === itemId ? { ...item, sections: [folderName] } : item));
     showToast(`Moved to ${folderName}`);
     if (!String(itemId).startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ sections: [folderName] }).eq('id', itemId);
-        if (error) { setItems(previousItems); showToast("Failed to move item. Reverting...", true); }
+        if (error) { 
+            setItems(prev => prev.map(item => item.id === itemId ? { ...item, sections: oldSections } : item));
+            showToast("Failed to move item. Reverting...", true); 
+        }
     }
   };
 
   const moveItemToList = async (itemId: string | number, listName: string) => {
-    const previousItems = [...items];
+    const oldList = items.find(i => i.id === itemId)?.list_name;
     setItems(prev => prev.map(item => item.id === itemId ? { ...item, list_name: listName } : item));
     showToast(`Added to list ${listName}`);
     if (!String(itemId).startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ list_name: listName }).eq('id', itemId);
-        if (error) { setItems(previousItems); showToast("Failed to add to list. Reverting...", true); }
+        if (error) { 
+            setItems(prev => prev.map(item => item.id === itemId ? { ...item, list_name: oldList } : item));
+            showToast("Failed to add to list. Reverting...", true); 
+        }
     }
   };
 
-  // --- NEW: BULK ACTIONS ---
   const bulkMoveToFolder = async (ids: (string | number)[], folderName: string) => {
-    const previousItems = [...items];
     setItems(prev => prev.map(item => ids.includes(item.id) ? { ...item, sections: [folderName] } : item));
     showToast(`Moved ${ids.length} items to ${folderName}`);
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ sections: [folderName] }).in('id', realIds);
-        if (error) { setItems(previousItems); showToast("Bulk move failed.", true); }
+        if (error) showToast("Bulk move failed. Refresh to sync.", true); 
     }
   };
 
   const bulkMoveToList = async (ids: (string | number)[], listName: string) => {
-    const previousItems = [...items];
     setItems(prev => prev.map(item => ids.includes(item.id) ? { ...item, list_name: listName } : item));
     showToast(`Added ${ids.length} items to ${listName}`);
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ list_name: listName }).in('id', realIds);
-        if (error) { setItems(previousItems); showToast("Bulk add failed.", true); }
+        if (error) showToast("Bulk add failed. Refresh to sync.", true); 
     }
   };
 
   const bulkMoveToTrash = async (ids: (string | number)[]) => {
-    const previousItems = [...items];
     setItems(prev => prev.map(item => ids.includes(item.id) ? { ...item, is_deleted: true } : item));
     showToast(`Moved ${ids.length} items to Trash`);
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ is_deleted: true }).in('id', realIds);
-        if (error) { setItems(previousItems); showToast("Bulk delete failed.", true); }
+        if (error) showToast("Bulk delete failed. Refresh to sync.", true); 
     }
   };
 
   const bulkRestoreFromTrash = async (ids: (string | number)[]) => {
-    const previousItems = [...items];
     setItems(prev => prev.map(item => ids.includes(item.id) ? { ...item, is_deleted: false } : item));
     showToast(`Restored ${ids.length} items`);
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ is_deleted: false }).in('id', realIds);
-        if (error) { setItems(previousItems); showToast("Bulk restore failed.", true); }
+        if (error) showToast("Bulk restore failed.", true); 
     }
   };
 
   const bulkHardDelete = async (ids: (string | number)[]) => {
-    const previousItems = [...items];
     setItems(prev => prev.filter(item => !ids.includes(item.id)));
     showToast(`Permanently deleted ${ids.length} items`);
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').delete().in('id', realIds);
-        if (error) { setItems(previousItems); showToast("Bulk hard delete failed.", true); }
+        if (error) showToast("Bulk hard delete failed.", true); 
     }
   };
-  // -------------------------
 
   const toggleItemReaction = async (item: BentoItem, emoji: string, userId: string) => {
-     const previousItems = [...items];
      let currentReactions: Record<string, string[]> = {};
      try { currentReactions = item.likes ? JSON.parse(item.likes) : {}; } catch {}
 
@@ -240,33 +247,44 @@ export function useBrainboardData(
 
      const reactionsString = Object.keys(reactions).length > 0 ? JSON.stringify(reactions) : null;
      setItems(prev => prev.map(i => i.id === item.id ? { ...i, likes: reactionsString as any } : i));
+     
      if (!String(item.id).startsWith('temp-')) {
         try {
            const { error } = await supabase.from('assets').update({ likes: reactionsString }).eq('id', item.id);
            if (error) throw error;
-        } catch (e) { setItems(previousItems); showToast("Failed to save reaction", true); }
+        } catch (e) { 
+           showToast("Failed to save reaction", true); 
+           // Revert visually if failed
+           setItems(prev => prev.map(i => i.id === item.id ? { ...i, likes: item.likes } : i));
+        }
      }
   };
 
   const toggleChecklistItem = async (item: BentoItem, clItemId: string) => {
      if (!item.checklist_items) return;
-     const previousItems = [...items];
      const newItems = item.checklist_items.map((ci: any) => ci.id === clItemId ? { ...ci, checked: !ci.checked } : ci );
      setItems(prev => prev.map(i => i.id === item.id ? { ...i, checklist_items: newItems } : i));
+     
      if (!String(item.id).startsWith('temp-')) {
          try { 
              const { error } = await supabase.from('assets').update({ checklist_items: newItems }).eq('id', item.id); 
              if (error) throw error;
-         } catch (e) { setItems(previousItems); showToast("Failed to update checklist", true); }
+         } catch (e) { 
+             setItems(prev => prev.map(i => i.id === item.id ? { ...i, checklist_items: item.checklist_items } : i));
+             showToast("Failed to update checklist", true); 
+         }
      }
   };
 
   const updateStickyNote = async (id: string | number, newSummary: string) => {
-    const previousItems = [...items];
+    const oldSummary = items.find(i => i.id === id)?.ai_summary;
     setItems(prev => prev.map(item => item.id === id ? { ...item, ai_summary: newSummary } : item));
     if (!String(id).startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ ai_summary: newSummary }).eq('id', id);
-        if (error) { setItems(previousItems); showToast("Failed to save note.", true); }
+        if (error) { 
+            setItems(prev => prev.map(item => item.id === id ? { ...item, ai_summary: oldSummary } : item));
+            showToast("Failed to save note.", true); 
+        }
     }
   };
 
@@ -275,69 +293,60 @@ export function useBrainboardData(
   const hardDelete = async (id: string | number) => { bulkHardDelete([id]); };
 
   const emptyTrash = async () => {
-    const previousItems = [...items];
     setItems(prev => prev.filter(item => !item.is_deleted));
     showToast("Trash Emptied");
     const { error } = await supabase.from('assets').delete().eq('is_deleted', true);
-    if (error) { setItems(previousItems); showToast("Failed to empty trash.", true); }
+    if (error) { showToast("Failed to empty trash. Refresh to sync.", true); }
   };
 
   const renameFolder = async (oldName: string, newName: string) => {
     const trimmed = newName.trim();
-    const previousItems = [...items];
     setItems(prev => prev.map(item => ({ ...item, sections: item.sections?.map(s => s === oldName ? trimmed : s) })));
     const itemsToUpdate = items.filter(i => i.sections?.includes(oldName));
     try {
         for(const item of itemsToUpdate) {
             const newSecs = item.sections?.map(s => s === oldName ? trimmed : s) || [];
-            const { error } = await supabase.from('assets').update({ sections: newSecs }).eq('id', item.id);
-            if (error) throw error;
+            await supabase.from('assets').update({ sections: newSecs }).eq('id', item.id);
         }
-    } catch (e) { setItems(previousItems); showToast("Failed to rename folder.", true); }
+    } catch (e) { showToast("Failed to rename folder.", true); }
   };
 
   const deleteFolder = async (folderName: string) => {
-    const previousItems = [...items];
     setItems(prev => prev.map(item => ({ ...item, sections: item.sections?.filter(s => s !== folderName) })));
     const itemsToUpdate = items.filter(i => i.sections?.includes(folderName));
     try {
         for(const item of itemsToUpdate) {
             const newSecs = item.sections?.filter(s => s !== folderName) || [];
-            const { error } = await supabase.from('assets').update({ sections: newSecs.length ? newSecs : null }).eq('id', item.id);
-            if (error) throw error;
+            await supabase.from('assets').update({ sections: newSecs.length ? newSecs : null }).eq('id', item.id);
         }
-    } catch (e) { setItems(previousItems); showToast("Failed to delete folder.", true); }
+    } catch (e) { showToast("Failed to delete folder.", true); }
   };
 
   const renameList = async (oldName: string, newName: string) => {
     const trimmed = newName.trim();
-    const previousItems = [...items];
     setItems(prev => prev.map(item => item.list_name === oldName ? { ...item, list_name: trimmed } : item));
     const itemsToUpdate = items.filter(i => i.list_name === oldName);
     try {
         for(const item of itemsToUpdate) {
-           const { error } = await supabase.from('assets').update({ list_name: trimmed }).eq('id', item.id);
-           if (error) throw error;
+           await supabase.from('assets').update({ list_name: trimmed }).eq('id', item.id);
         }
-    } catch (e) { setItems(previousItems); showToast("Failed to rename list.", true); }
+    } catch (e) { showToast("Failed to rename list.", true); }
   };
 
   const deleteList = async (listName: string) => {
-    const previousItems = [...items];
     setItems(prev => prev.map(item => item.list_name === listName ? { ...item, list_name: undefined } : item));
     const itemsToUpdate = items.filter(i => i.list_name === listName);
     try {
         for(const item of itemsToUpdate) {
-            const { error } = await supabase.from('assets').update({ list_name: null }).eq('id', item.id);
-            if (error) throw error;
+            await supabase.from('assets').update({ list_name: null }).eq('id', item.id);
         }
-    } catch (e) { setItems(previousItems); showToast("Failed to delete list.", true); }
+    } catch (e) { showToast("Failed to delete list.", true); }
   };
 
   return {
     items, setItems, customFolders, setCustomFolders, customLists, setCustomLists,
     isLoading, page, setPage, hasMore, fetchItems, saveNote, insertItem, updateItemTags, moveItemToFolder, moveItemToList, updateStickyNote, toggleItemReaction, toggleChecklistItem,
     moveToTrash, restoreFromTrash, hardDelete, emptyTrash, renameFolder, deleteFolder, renameList, deleteList,
-    bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete // Export new bulk actions
+    bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete 
   };
 }
