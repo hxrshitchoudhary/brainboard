@@ -70,6 +70,7 @@ export default function BrainboardBalanced() {
   const [editingNote, setEditingNote] = useState<BentoItem | null>(null);
   const [cmdKOpen, setCmdKOpen] = useState(false);
   const [playingYouTubeId, setPlayingYouTubeId] = useState<string | null>(null);
+  const [showTrashConfirm, setShowTrashConfirm] = useState(false);
   
   const [selectedItems, setSelectedItems] = useState<Set<string | number>>(new Set());
   const [lastSelected, setLastSelected] = useState<string | number | null>(null);
@@ -408,8 +409,8 @@ export default function BrainboardBalanced() {
     card: isDark ? "bg-[#141416] border-white/[0.04] shadow-[0_8px_30px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.05)]" : "bg-white border-black/[0.04] shadow-[0_4px_20px_rgba(0,0,0,0.03),inset_0_1px_0_rgba(255,255,255,0.4)]",
     cardHover: isDark ? "hover:bg-[#1A1A1D] hover:border-teal-500/30 hover:shadow-[0_8px_40px_rgba(20,184,166,0.15)]" : "hover:border-teal-500/20 hover:shadow-[0_8px_30px_rgba(20,184,166,0.1)]",
     input: isDark ? "bg-[#1A1A1D] border-white/[0.05] text-white focus:border-teal-500/50 shadow-inner" : "bg-[#F9F9F8] border-black/[0.06] text-zinc-900 focus:border-teal-500/50 shadow-inner",
-    btnPrimary: "bg-teal-500 text-white hover:bg-teal-400 shadow-[0_4px_14px_rgba(20,184,166,0.3)] active:scale-95 transition-all duration-300", 
-    btnGhost: isDark ? "hover:bg-white/10 text-zinc-300 hover:text-zinc-100 active:scale-95 transition-all duration-300" : "hover:bg-black/5 text-zinc-600 hover:text-zinc-900 active:scale-95 transition-all duration-300"
+    btnPrimary: "bg-teal-500 text-white hover:bg-teal-400 shadow-[0_4px_14px_rgba(20,184,166,0.3)] active:scale-95 transition-all duration-200", 
+    btnGhost: isDark ? "hover:bg-white/10 text-zinc-300 hover:text-zinc-100 active:scale-95 transition-all duration-200" : "hover:bg-black/5 text-zinc-600 hover:text-zinc-900 active:scale-95 transition-all duration-200"
   };
 
   const handleSecureLogout = useCallback(async () => {
@@ -1137,6 +1138,29 @@ export default function BrainboardBalanced() {
          )}
       </AnimatePresence>
 
+      {/* NEW Empty Trash Confirmation Modal */}
+      <AnimatePresence>
+         {showTrashConfirm && (
+            <div className="fixed inset-0 z-99999 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowTrashConfirm(false)}>
+               <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }} 
+                  animate={{ opacity: 1, scale: 1 }} 
+                  exit={{ opacity: 0, scale: 0.95 }} 
+                  transition={{ duration: 0.15 }} 
+                  className={`w-full max-w-sm rounded-2xl shadow-2xl border p-6 ${isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-zinc-200"}`} 
+                  onClick={e => e.stopPropagation()}
+               >
+                  <h3 className="text-xl font-bold mb-2 tracking-tight">Empty Trash?</h3>
+                  <p className={`text-sm mb-6 ${theme.textMuted}`}>This action cannot be undone. All items in the trash will be permanently deleted.</p>
+                  <div className="flex gap-3 justify-end">
+                     <button onClick={() => setShowTrashConfirm(false)} className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${isDark ? "bg-zinc-800 hover:bg-zinc-700 text-white" : "bg-zinc-100 hover:bg-zinc-200 text-zinc-900"}`}>Cancel</button>
+                     <button onClick={() => { emptyTrash(); setShowTrashConfirm(false); }} className="px-4 py-2 text-sm font-semibold rounded-xl bg-red-500 hover:bg-red-600 text-white transition-colors">Empty Trash</button>
+                  </div>
+               </motion.div>
+            </div>
+         )}
+      </AnimatePresence>
+
       <div style={{ zIndex: 99999 }} className="flex md:hidden fixed inset-0 bg-[#000000] text-white flex-col items-center justify-center p-8 text-center selection:bg-teal-500/30">
          <Monitor size={80} className="mb-8 text-teal-400 opacity-90" strokeWidth={1} />
          <h2 className="text-4xl font-black tracking-tight mb-4">Desktop Only</h2>
@@ -1172,6 +1196,9 @@ export default function BrainboardBalanced() {
                </Command.Item>
                <Command.Item onSelect={() => { updateNav({ workspace: "team" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    <Users size={18} /> Switch to Team Workspace
+               </Command.Item>
+               <Command.Item onSelect={() => { updateNav({ categoryType: "trash", category: "All" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+                   <Trash2 size={18} /> Go to Trash
                </Command.Item>
                <Command.Item onSelect={() => { toggleTheme(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    {isDark ? <Sun size={18} /> : <Moon size={18} />} Toggle Theme
@@ -1248,7 +1275,7 @@ export default function BrainboardBalanced() {
                initial={{ opacity: 0 }} 
                animate={{ opacity: 1 }} 
                exit={{ opacity: 0 }} 
-               transition={{ duration: 0.2 }} 
+               transition={{ duration: 0.15 }} 
                className="fixed inset-0 flex flex-col items-center justify-center bg-black/90 backdrop-blur-2xl p-4 md:p-10" 
                style={{ zIndex: 99999 }} 
                onClick={() => setPlayingYouTubeId(null)}
@@ -1259,7 +1286,7 @@ export default function BrainboardBalanced() {
              <motion.div 
                  initial={{ scale: 0.95, y: 20 }} 
                  animate={{ scale: 1, y: 0 }} 
-                 transition={modalSpring} 
+                 transition={{ duration: 0.2, ease: "easeOut" }} 
                  className="w-full max-w-6xl aspect-video rounded-3xl overflow-hidden shadow-2xl bg-black border border-white/10" 
                  onClick={e => e.stopPropagation()}
              >
@@ -1283,12 +1310,12 @@ export default function BrainboardBalanced() {
                    className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-lg shadow-sm border ${isDark ? "bg-zinc-800 border-white/5" : "bg-white border-[#e8e4dc]"}`} 
                    initial={false} 
                    animate={{ left: nav.workspace === "personal" ? "4px" : "calc(50%)" }} 
-                   transition={modalSpring} 
+                   transition={{ duration: 0.2, ease: "easeOut" }} 
                />
-               <button onClick={() => { updateNav({ workspace: "personal", viewMode: "grid" }); updateUi({ isChatOpen: false }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === "personal" ? "text-teal-600 dark:text-teal-400" : theme.textMuted}`}>
+               <button onClick={() => startTransition(() => { updateNav({ workspace: "personal", viewMode: "grid" }); updateUi({ isChatOpen: false }); fetchItems(1, false); })} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === "personal" ? "text-teal-600 dark:text-teal-400" : theme.textMuted}`}>
                    Personal
                </button>
-               <button onClick={() => { updateNav({ workspace: "team", viewMode: "grid" }); fetchItems(1, false); }} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === "team" ? "text-teal-600 dark:text-teal-400" : theme.textMuted}`}>
+               <button onClick={() => startTransition(() => { updateNav({ workspace: "team", viewMode: "grid" }); fetchItems(1, false); })} className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-colors ${nav.workspace === "team" ? "text-teal-600 dark:text-teal-400" : theme.textMuted}`}>
                    Team
                </button>
             </div>
@@ -1300,6 +1327,8 @@ export default function BrainboardBalanced() {
                <div className="space-y-0.5">
                  <SidebarItem icon={<Compass size={16} strokeWidth={1.5}/>} label="Everything" active={nav.categoryType === "all"} onClick={() => updateNav({ categoryType: "all", category: "All" })} theme={theme} isDark={isDark} />
                  <SidebarItem icon={<Pin size={16} strokeWidth={1.5}/>} label="Pinned" active={nav.categoryType === "pinned"} onClick={() => updateNav({ categoryType: "pinned", category: "All" })} theme={theme} isDark={isDark} />
+                 <div className="my-1 mx-3 border-t border-black/5 dark:border-white/5"></div>
+                 <SidebarItem icon={<Trash2 size={16} strokeWidth={1.5}/>} label="Trash" active={nav.categoryType === "trash"} onClick={() => updateNav({ categoryType: "trash", category: "All" })} theme={theme} isDark={isDark} />
                </div>
             </div>
 
@@ -1434,7 +1463,8 @@ export default function BrainboardBalanced() {
         onDrop={handleDrop}
         tabIndex={0} 
       >
-        {lasso.active && (
+        {/* Only render lasso tool if user has dragged at least a few pixels to prevent phantom "green line" dots on accidental clicks */}
+        {lasso.active && (Math.abs(lasso.currentX - lasso.startX) > 2 || Math.abs(lasso.currentY - lasso.startY) > 2) && (
           <div
             className="fixed border border-teal-500/50 bg-teal-500/10 transition-none pointer-events-none rounded-lg backdrop-blur-sm"
             style={{ 
@@ -1448,29 +1478,31 @@ export default function BrainboardBalanced() {
           />
         )}
 
+        {/* SLEEK PROFESSIONAL FLOATING SELECTION MENU */}
         <AnimatePresence>
            {isSelectMode && (
               <motion.div 
-                 initial={{ y: 100, opacity: 0, x: "-50%" }} 
-                 animate={{ y: 0, opacity: 1, x: "-50%" }} 
-                 exit={{ y: 100, opacity: 0, x: "-50%" }}
-                 className="fixed bottom-20 md:bottom-10 left-1/2 flex items-center gap-2 md:gap-3 px-3 py-3 rounded-full shadow-2xl border backdrop-blur-3xl bg-[#1C1C1E]/95 border-white/10 w-[90%] md:w-auto max-w-lg justify-between md:justify-start"
-                 style={{ zIndex: 9999 }}
+                 initial={{ y: 50, opacity: 0, x: "-50%", scale: 0.95 }} 
+                 animate={{ y: 0, opacity: 1, x: "-50%", scale: 1 }} 
+                 exit={{ y: 50, opacity: 0, x: "-50%", scale: 0.95 }}
+                 transition={{ duration: 0.15, ease: "easeOut" }}
+                 className={`fixed bottom-8 left-1/2 flex items-center h-12 px-3 rounded-xl shadow-2xl border backdrop-blur-xl z-9999 ${isDark ? 'bg-[#18181B]/95 border-white/10 shadow-black/50' : 'bg-white/95 border-zinc-200 shadow-zinc-200/50'}`}
               >
-                 <div className="px-2 md:px-4 border-r border-white/10 flex flex-col md:flex-row items-start md:items-center gap-1 md:gap-3 shrink-0">
-                    <span className="text-white text-xs md:text-sm font-black tracking-tight">{selectedItems.size} <span className="text-zinc-400 font-bold hidden sm:inline">Selected</span></span>
-                    <button onClick={handleSelectAll} className="text-[9px] md:text-[10px] text-teal-400 font-bold uppercase tracking-widest hover:text-teal-300">
-                       {selectedItems.size === filteredData.length ? "Deselect All" : "Select All"}
+                 <div className={`flex items-center gap-3 pr-3 border-r ${isDark ? 'border-white/10' : 'border-zinc-200'} shrink-0`}>
+                    <div className="flex items-center justify-center w-6 h-6 rounded-md bg-teal-500/10 text-teal-500 text-xs font-bold">{selectedItems.size}</div>
+                    <span className="text-sm font-semibold hidden sm:inline">Selected</span>
+                    <button onClick={handleSelectAll} className="text-xs text-zinc-400 hover:text-teal-500 font-medium transition-colors">
+                       {selectedItems.size === filteredData.length ? "Clear" : "Select All"}
                     </button>
                  </div>
 
-                 <div className="flex items-center gap-1 md:gap-2 flex-1 justify-end">
+                 <div className="flex items-center gap-1 pl-3">
                    {nav.categoryType === "trash" ? (
                       <>
-                         <button onClick={() => { bulkRestoreFromTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-emerald-400 hover:bg-white/10 transition-colors">
+                         <button onClick={() => { bulkRestoreFromTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}>
                             <RotateCcw size={14} /> <span className="hidden sm:inline">Restore</span>
                          </button>
-                         <button onClick={() => { if(window.confirm("Delete these items forever?")) { bulkHardDelete(Array.from(selectedItems)); setSelectedItems(new Set()); } }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-red-400 hover:bg-white/10 transition-colors">
+                         <button onClick={() => { if(window.confirm("Delete these items forever?")) { bulkHardDelete(Array.from(selectedItems)); setSelectedItems(new Set()); } }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 transition-colors ${isDark ? 'hover:bg-red-500/10' : 'hover:bg-red-50'}`}>
                             <Trash2 size={14} /> <span className="hidden sm:inline">Delete</span>
                          </button>
                       </>
@@ -1478,29 +1510,29 @@ export default function BrainboardBalanced() {
                       <>
                          <div className="relative group">
                             <select defaultValue="" onChange={(e) => { bulkMoveToFolder(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                               <option value="" disabled>Select Folder</option>
-                               {customFolders.map(f => <option key={f} value={f}>{f}</option>)}
+                               <option value="" disabled>Folder</option>
+                               {customFolders.map((f: string) => <option key={f} value={f}>{f}</option>)}
                             </select>
-                            <button className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-zinc-300 hover:bg-white/10 transition-colors">
-                                <Folder size={14} className="text-zinc-400" /> <span className="hidden sm:inline">Folder</span>
+                            <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}>
+                                <Folder size={14} className={isDark ? "text-zinc-400" : "text-zinc-500"} /> <span className="hidden sm:inline">Move</span>
                             </button>
                          </div>
                          <div className="relative group">
                             <select defaultValue="" onChange={(e) => { bulkMoveToList(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                               <option value="" disabled>Select List</option>
-                               {customLists.map(l => <option key={l} value={l}>{l}</option>)}
+                               <option value="" disabled>List</option>
+                               {customLists.map((l: string) => <option key={l} value={l}>{l}</option>)}
                             </select>
-                            <button className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-zinc-300 hover:bg-white/10 transition-colors">
-                                <ListIcon size={14} className="text-zinc-400" /> <span className="hidden sm:inline">List</span>
+                            <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}>
+                                <ListIcon size={14} className={isDark ? "text-zinc-400" : "text-zinc-500"} /> <span className="hidden sm:inline">Add to List</span>
                             </button>
                          </div>
-                         <button onClick={() => { bulkMoveToTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[10px] md:text-xs font-bold text-red-400 hover:bg-white/10 transition-colors">
+                         <button onClick={() => { bulkMoveToTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 transition-colors ${isDark ? 'hover:bg-red-500/10' : 'hover:bg-red-50'}`}>
                              <Trash2 size={14} /> <span className="hidden sm:inline">Trash</span>
                          </button>
                       </>
                    )}
-                   <div className="border-l border-white/10 pl-1 md:pl-3">
-                       <button onClick={() => setSelectedItems(new Set())} className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-colors">
+                   <div className={`border-l ml-1 pl-2 ${isDark ? 'border-white/10' : 'border-zinc-200'}`}>
+                       <button onClick={() => setSelectedItems(new Set())} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-400' : 'hover:bg-zinc-100 text-zinc-500'}`}>
                            <X size={16} />
                        </button>
                    </div>
@@ -1538,7 +1570,7 @@ export default function BrainboardBalanced() {
 
             <div className={`hidden md:flex items-center p-1 border shadow-sm rounded-xl ${isDark ? "bg-[#18181B] border-white/5" : "bg-white border-black/5"}`}>
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="Masonry Grid" onClick={() => updateNav({ viewMode: "grid" })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "grid" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
+                 <button aria-label="Masonry Grid" onClick={() => startTransition(() => updateNav({ viewMode: "grid" }))} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "grid" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
                      <Columns size={18} strokeWidth={1.5} />
                  </button>
                  <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
@@ -1547,7 +1579,7 @@ export default function BrainboardBalanced() {
                </div>
                
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="Uniform Cards" onClick={() => updateNav({ viewMode: "card" })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "card" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
+                 <button aria-label="Uniform Cards" onClick={() => startTransition(() => updateNav({ viewMode: "card" }))} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "card" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
                      <LayoutGrid size={18} strokeWidth={1.5} />
                  </button>
                  <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
@@ -1556,7 +1588,7 @@ export default function BrainboardBalanced() {
                </div>
                
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="List View" onClick={() => updateNav({ viewMode: "list" })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "list" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
+                 <button aria-label="List View" onClick={() => startTransition(() => updateNav({ viewMode: "list" }))} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "list" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
                      <AlignJustify size={18} strokeWidth={1.5} />
                  </button>
                  <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
@@ -1565,7 +1597,7 @@ export default function BrainboardBalanced() {
                </div>
                
                <div className="relative group/tooltip flex items-center justify-center">
-                 <button aria-label="Calendar View" onClick={() => updateNav({ viewMode: "calendar" })} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "calendar" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
+                 <button aria-label="Calendar View" onClick={() => startTransition(() => updateNav({ viewMode: "calendar" }))} className={`p-2.5 transition-all active:scale-95 rounded-lg ${nav.viewMode === "calendar" ? (isDark ? "bg-white/10 text-teal-400 shadow-sm" : "bg-black/5 text-teal-600 shadow-sm") : theme.textMuted}`}>
                      <CalendarIcon size={18} strokeWidth={1.5} />
                  </button>
                  <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
@@ -1608,7 +1640,7 @@ export default function BrainboardBalanced() {
                          {ui.showNotifications && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => updateUi({ showNotifications: false })} />
-                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-72 md:w-80 z-50 shadow-2xl border backdrop-blur-3xl p-2 rounded-3xl ${isDark ? "bg-zinc-900/95 border-zinc-800" : "bg-white/95 border-[#e8e4dc]"}`}>
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ duration: 0.15 }} className={`absolute right-0 top-full mt-3 w-72 md:w-80 z-50 shadow-2xl border backdrop-blur-3xl p-2 rounded-3xl ${isDark ? "bg-zinc-900/95 border-zinc-800" : "bg-white/95 border-[#e8e4dc]"}`}>
                                  <div className="p-4 border-b border-black/5 dark:border-white/5 mb-2 flex items-center justify-between">
                                     <h4 className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>Notifications</h4>
                                     {notifications.some(n => !n.read) && (
@@ -1645,7 +1677,7 @@ export default function BrainboardBalanced() {
                          {ui.showTeamPresence && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => updateUi({ showTeamPresence: false })} />
-                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className={`absolute right-0 top-full mt-3 w-80 z-50 shadow-2xl border backdrop-blur-3xl flex flex-col overflow-hidden rounded-3xl ${isDark ? "bg-zinc-900/95 border-zinc-800" : "bg-white/95 border-[#e8e4dc]"}`}>
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ duration: 0.15 }} className={`absolute right-0 top-full mt-3 w-80 z-50 shadow-2xl border backdrop-blur-3xl flex flex-col overflow-hidden rounded-3xl ${isDark ? "bg-zinc-900/95 border-zinc-800" : "bg-white/95 border-[#e8e4dc]"}`}>
                                  <div className="flex flex-col gap-1 max-h-80 overflow-y-auto p-2">
                                     
                                     <div className="px-3 pt-3 pb-2">
@@ -1694,8 +1726,9 @@ export default function BrainboardBalanced() {
                )}
             </AnimatePresence>
             
+            {/* Trash Button - Re-added confirmation popup support */}
             {nav.categoryType === "trash" ? (
-              <button key="btn-trash" aria-label="Empty Trash" onClick={emptyTrash} className={`px-6 py-3 text-sm font-bold transition-all active:scale-95 flex items-center gap-2 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white rounded-xl`}>
+              <button key="btn-trash" aria-label="Empty Trash" onClick={() => setShowTrashConfirm(true)} className={`px-6 py-3 text-sm font-bold transition-all active:scale-95 flex items-center gap-2 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white rounded-xl`}>
                 <Trash2 size={16} strokeWidth={2} /> <span className="hidden md:inline">Empty Trash</span>
               </button>
             ) : (
@@ -1789,20 +1822,21 @@ export default function BrainboardBalanced() {
            </AnimatePresence>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 md:px-12 pt-6 pb-24 md:pb-20 custom-scrollbar relative z-10 w-full">
-           
-           <div className="absolute inset-0 z-0 cursor-crosshair" style={{ minHeight: "200vh" }} onPointerDown={handlePointerDown} />
-           
-           <div className="relative z-10">
+        {/* SMOOTH VIEW SWITCHING: Cross-fading the entire layout wrapper */}
+        <div 
+           className="flex-1 overflow-y-auto px-6 md:px-12 pt-6 pb-24 md:pb-20 custom-scrollbar relative z-10 w-full cursor-crosshair"
+           onPointerDown={handlePointerDown}
+        >
+           <div className="relative z-10 cursor-auto min-h-full">
                {isLoading && page === 1 ? (
                   <div className={nav.viewMode === "grid" ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6 pointer-events-none" : nav.viewMode === "list" ? "flex flex-col gap-3 pointer-events-none" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pointer-events-none"}>
                      {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                        <div key={i} className={`border relative overflow-hidden ${theme.card} h-64 md:h-85 break-inside-avoid inline-block w-full mb-6 rounded-3xl`}>
+                        <div key={i} className={`border relative overflow-hidden ${theme.card} ${nav.viewMode === 'list' ? 'h-18' : 'h-64 md:h-85'} break-inside-avoid w-full mb-6 rounded-3xl`}>
                            <div className={`absolute inset-0 -translate-x-full bg-linear-to-r from-transparent ${isDark ? "via-white/5" : "via-black/5"} to-transparent animate-shimmer`} />
                         </div>
                      ))}
                   </div>
-               ) : filteredData.length === 0 && (nav.viewMode === "grid" || nav.viewMode === "card") ? (
+               ) : filteredData.length === 0 && nav.viewMode !== "calendar" ? (
                   <div className="flex-1 w-full flex flex-col items-center mt-20 text-center opacity-50 px-4 pointer-events-none">
                      <div className={`w-full max-w-lg border border-dashed p-16 flex flex-col items-center justify-center transition-colors shadow-sm rounded-3xl ${isDark ? "border-white/20 bg-white/5" : "border-black/20 bg-black/5"}`}>
                        <LayoutGrid size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
@@ -1811,106 +1845,70 @@ export default function BrainboardBalanced() {
                      </div>
                   </div>
                   
-               ) : nav.viewMode === "list" ? (
-                  <div className="flex flex-col gap-4 pb-10 pointer-events-auto">
-                     <AnimatePresence>
-                        {filteredData.map((item, index) => (
-                            <motion.div 
-                                key={item.id} 
-                                id={`card-${item.id}`}
-                                layout 
-                                variants={cardVariants} 
-                                initial="hidden" 
-                                animate="visible" 
-                                exit="exit" 
-                                className="lasso-selectable relative z-0 hover:z-50"
-                                data-id={item.id}
-                            >
-                               <MemoizedMasonryCard 
-                                   customFolders={customFolders} 
-                                   customLists={customLists} 
-                                   onMoveToFolder={moveItemToFolder} 
-                                   onMoveToList={moveItemToList} 
-                                   onUpdateTags={updateItemTags} 
-                                   onTagClick={(tag: string) => updateNav({ categoryType: "tag", category: tag, viewMode: "grid" })} 
-                                   viewMode={nav.viewMode} 
-                                   item={item} 
-                                   theme={theme} 
-                                   isDark={isDark} 
-                                   inTrash={nav.categoryType === "trash"} 
-                                   activeWorkspace={nav.workspace} 
-                                   currentUserId={session?.user?.id} 
-                                   teamRole={teamRole} 
-                                   teamMembers={teamMembers} 
-                                   onRestore={restoreFromTrash} 
-                                   onHardDelete={hardDelete} 
-                                   onDelete={moveToTrash} 
-                                   onUpdateSticky={updateStickyNote} 
-                                   toggleItemReaction={toggleItemReaction} 
-                                   toggleChecklistItem={toggleChecklistItem} 
-                                   isSelected={selectedItems.has(item.id)} 
-                                   onToggleSelect={handleToggleSelect} 
-                                   isSelectMode={isSelectMode} 
-                                   isActiveKeyboard={activeIndex === index} 
-                                   onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
-                                   onClick={(e: any) => handleOpenItem(item)} 
-                               />
-                            </motion.div>
-                        ))}
-                     </AnimatePresence>
-                  </div>
-
-               ) : nav.viewMode === "card" || nav.viewMode === "grid" ? (
-                 <div className={`${nav.viewMode === "grid" ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"} pointer-events-auto`}>
-                   <AnimatePresence>
-                     {filteredData.map((item, index) => (
-                          <motion.div 
-                              key={item.id} 
-                              id={`card-${item.id}`}
-                              layout 
-                              variants={cardVariants} 
-                              initial="hidden" 
-                              animate="visible" 
-                              exit="exit" 
-                              className={`${nav.viewMode === "grid" ? "break-inside-avoid inline-block w-full mb-6 relative" : "h-full relative"} lasso-selectable z-0 hover:z-50`} 
-                              data-id={item.id}
-                          >
-                             <MemoizedMasonryCard 
-                                 customFolders={customFolders} 
-                                 customLists={customLists} 
-                                 onMoveToFolder={moveItemToFolder} 
-                                 onMoveToList={moveItemToList} 
-                                 onUpdateTags={updateItemTags} 
-                                 onTagClick={(tag: string) => updateNav({ categoryType: "tag", category: tag, viewMode: "grid" })} 
-                                 viewMode={nav.viewMode} 
-                                 item={item} 
-                                 theme={theme} 
-                                 isDark={isDark} 
-                                 inTrash={nav.categoryType === "trash"} 
-                                 activeWorkspace={nav.workspace} 
-                                 currentUserId={session?.user?.id} 
-                                 teamRole={teamRole} 
-                                 teamMembers={teamMembers} 
-                                 onRestore={restoreFromTrash} 
-                                 onHardDelete={hardDelete} 
-                                 onDelete={moveToTrash} 
-                                 onUpdateSticky={updateStickyNote} 
-                                 toggleItemReaction={toggleItemReaction} 
-                                 toggleChecklistItem={toggleChecklistItem} 
-                                 isSelected={selectedItems.has(item.id)} 
-                                 onToggleSelect={handleToggleSelect} 
-                                 isSelectMode={isSelectMode} 
-                                 isActiveKeyboard={activeIndex === index} 
-                                 onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
-                                 onClick={(e: any) => handleOpenItem(item)} 
-                             />
-                          </motion.div>
-                     ))}
-                   </AnimatePresence>
-                 </div>
+               ) : nav.viewMode !== "calendar" ? (
+                  <AnimatePresence mode="wait">
+                    <motion.div 
+                        key={nav.viewMode}
+                        initial={{ opacity: 0, filter: "blur(4px)", scale: 0.98 }}
+                        animate={{ opacity: 1, filter: "blur(0px)", scale: 1 }}
+                        exit={{ opacity: 0, filter: "blur(4px)", scale: 0.98 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className={`pointer-events-auto pb-10 w-full ${
+                            nav.viewMode === "list" ? "flex flex-col gap-4" : 
+                            nav.viewMode === "grid" ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6" : 
+                            "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"
+                        }`}
+                    >
+                        <AnimatePresence mode="popLayout">
+                          {filteredData.map((item, index) => (
+                              <motion.div 
+                                  key={item.id} 
+                                  layout="position"
+                                  variants={cardVariants} 
+                                  initial="hidden" 
+                                  animate="visible" 
+                                  exit="exit" 
+                                  className={`lasso-selectable relative z-0 hover:z-50 ${nav.viewMode === 'grid' ? 'break-inside-avoid inline-block w-full mb-6' : 'h-full w-full'}`}
+                                  data-id={item.id}
+                                  transition={{ duration: 0.15, ease: "easeOut" }}
+                              >
+                                 <MemoizedMasonryCard 
+                                     customFolders={customFolders} 
+                                     customLists={customLists} 
+                                     onMoveToFolder={moveItemToFolder} 
+                                     onMoveToList={moveItemToList} 
+                                     onUpdateTags={updateItemTags} 
+                                     onTagClick={(tag: string) => updateNav({ categoryType: "tag", category: tag, viewMode: "grid" })} 
+                                     viewMode={nav.viewMode} 
+                                     item={item} 
+                                     theme={theme} 
+                                     isDark={isDark} 
+                                     inTrash={nav.categoryType === "trash"} 
+                                     activeWorkspace={nav.workspace} 
+                                     currentUserId={session?.user?.id} 
+                                     teamRole={teamRole} 
+                                     teamMembers={teamMembers} 
+                                     onRestore={restoreFromTrash} 
+                                     onHardDelete={hardDelete} 
+                                     onDelete={moveToTrash} 
+                                     onUpdateSticky={updateStickyNote} 
+                                     toggleItemReaction={toggleItemReaction} 
+                                     toggleChecklistItem={toggleChecklistItem} 
+                                     isSelected={selectedItems.has(item.id)} 
+                                     onToggleSelect={handleToggleSelect} 
+                                     isSelectMode={isSelectMode} 
+                                     isActiveKeyboard={activeIndex === index} 
+                                     onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
+                                     onClick={(e: any) => handleOpenItem(item)} 
+                                 />
+                              </motion.div>
+                          ))}
+                        </AnimatePresence>
+                    </motion.div>
+                  </AnimatePresence>
 
                ) : (
-                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={modalSpring} className={`w-full overflow-hidden flex flex-col shadow-2xl border mb-10 rounded-3xl ${isDark ? "bg-[#0E0E12] border-white/5" : "bg-white border-black/5"} pointer-events-auto`}>
+                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15, ease: "easeOut" }} className={`w-full overflow-hidden flex flex-col shadow-2xl border mb-10 rounded-3xl ${isDark ? "bg-[#0E0E12] border-white/5" : "bg-white border-black/5"} pointer-events-auto`}>
                     <div className={`grid grid-cols-7 border-b shrink-0 ${isDark ? "border-white/5 bg-white/5" : "border-black/5 bg-black/5"}`}>
                        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
                           <div key={day} className={`p-3 md:p-5 text-center text-[10px] md:text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{day.slice(0, 3)}</div>
