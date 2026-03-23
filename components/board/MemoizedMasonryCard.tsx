@@ -5,7 +5,7 @@ import { MoreHorizontal, Folder, List as ListIcon, FileText, X, RotateCcw, Trash
 import { cleanName } from '@/lib/utils';
 import { APPLE_EMOJIS } from './ReactionBar';
 
-export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFolders, customLists, onMoveToFolder, onMoveToList, onUpdateTags, onTagClick, item, theme, isDark, activeWorkspace, currentUserId, teamRole, viewMode, onClick, inTrash, onRestore, onHardDelete, onDelete, onUpdateSticky, toggleItemReaction, toggleChecklistItem, isSelected, onToggleSelect, isSelectMode, onPlayYouTube, teamMembers, isActiveKeyboard }: any) {
+export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFolders, customLists, onMoveToFolder, onMoveToList, onUpdateTags, onTagClick, item, theme, isDark, activeWorkspace, currentUserId, teamRole, viewMode, onClick, inTrash, onRestore, onHardDelete, onDelete, onUpdateSticky, toggleItemReaction, toggleChecklistItem, isSelected, onToggleSelect, isSelectMode, onPlayYouTube, teamMembers, isActiveKeyboard, selectedItems }: any) {
   const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
   const youtubeId = ytMatch ? ytMatch[1] : null;
   const isYouTube = !!youtubeId;
@@ -76,7 +76,38 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
 
   const handleStickyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { setStickyText(e.target.value); };
   const handleStickyBlur = () => { setIsEditingSticky(false); if (stickyText !== item.ai_summary && onUpdateSticky) { onUpdateSticky(item.id, stickyText); } };
-  const handleDragStart = (e: any) => { e.dataTransfer.setData('application/x-brainboard-item', JSON.stringify({ id: item.id })); e.dataTransfer.effectAllowed = 'move'; };
+  
+  // --- BULLETPROOF DRAG HANDLER ---
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => { 
+      e.dataTransfer.effectAllowed = 'move'; 
+      
+      let dragPayload;
+
+      // Dragging multiple items
+      if (isSelected && selectedItems && selectedItems.length > 1) {
+          dragPayload = { type: 'multi', payload: selectedItems };
+          
+          // Create native visual badge ("Moving X items")
+          const badge = document.createElement('div');
+          badge.id = 'drag-badge';
+          badge.innerHTML = `<div style="background:#14b8a6;color:white;padding:6px 14px;border-radius:12px;font-family:sans-serif;font-size:12px;font-weight:bold;box-shadow:0 10px 25px rgba(0,0,0,0.5);">Moving ${selectedItems.length} items</div>`;
+          badge.style.position = 'absolute';
+          badge.style.top = '-1000px';
+          document.body.appendChild(badge);
+          e.dataTransfer.setDragImage(badge, -10, -10);
+          setTimeout(() => {
+              const el = document.getElementById('drag-badge');
+              if (el) el.remove();
+          }, 100);
+      } 
+      // Dragging a single item (Card/Reel/Note)
+      else {
+          dragPayload = { type: 'single', payload: item.id };
+      }
+      
+      // Use 'text/plain' to ensure maximum browser compatibility
+      e.dataTransfer.setData('text/plain', JSON.stringify(dragPayload));
+  };
 
   const reactionsObj = useMemo(() => { try { return JSON.parse(item?.likes || '{}'); } catch { return {}; } }, [item?.likes]);
   const activeReactions = Object.entries(reactionsObj);
@@ -133,7 +164,8 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                  else { onClick(e); }
              }
           }}
-          draggable={!inTrash && !isSelectMode} onDragStart={handleDragStart}
+          // Fix: Type override for Framer Motion native HTML5 drag event override
+          draggable={!inTrash} onDragStart={handleDragStart as any} 
           className={`group/list relative rounded-2xl transition-all duration-200 flex flex-row items-center w-full border ${theme.card} ${theme.cardHover} p-3 gap-4 h-18 ${isSelected ? 'ring-2 ring-teal-500 bg-teal-500/5' : ''} ${isActiveKeyboard ? 'ring-2 ring-teal-500/80 shadow-[0_0_20px_rgba(20,184,166,0.2)]' : ''} lasso-selectable cursor-pointer font-sans`}
           data-id={item.id}
        >
@@ -145,7 +177,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
 
           <div className={`w-12 h-12 shrink-0 rounded-xl overflow-hidden flex items-center justify-center border shadow-sm ${isDark ? 'border-white/10 bg-white/5' : 'border-black/5 bg-black/5'}`}>
              {displayImg ? (
-                 <img src={displayImg} className="w-full h-full object-cover" alt="thumb" />
+                 <img src={displayImg} className="w-full h-full object-cover" alt="thumb" draggable={false} />
              ) : (
                  itemType === 'audio' ? <Music size={18} className="text-fuchsia-500 opacity-80" /> :
                  itemType === 'document' ? <FileIcon size={18} className="text-blue-500 opacity-80" /> :
@@ -262,16 +294,16 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
              else { onClick(e); }
          }
       }} 
-      draggable={!inTrash && !isSelectMode} onDragStart={handleDragStart}
-      className={`group/card relative rounded-3xl transition-all duration-200 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isActiveKeyboard ? 'ring-4 ring-teal-500/80 shadow-[0_0_40px_rgba(20,184,166,0.4)] scale-[1.02]' : ''} ${!inTrash && !isSelectMode ? 'active:cursor-grabbing hover:cursor-grab' : ''} lasso-selectable`}
+      // Fix: Type override for Framer Motion native HTML5 drag event override
+      draggable={!inTrash} onDragStart={handleDragStart as any}
+      className={`group/card relative rounded-3xl transition-all duration-200 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isActiveKeyboard ? 'ring-4 ring-teal-500/80 shadow-[0_0_40px_rgba(20,184,166,0.4)] scale-[1.02]' : ''} ${!inTrash ? 'active:cursor-grabbing hover:cursor-grab' : ''} lasso-selectable`}
       style={{ zIndex: isCardMenuOpen || isTagMenuOpen ? 50 : 10 }}
       data-id={item.id}
     >
       <div className="absolute inset-0 rounded-3xl pointer-events-none border border-white/5 mix-blend-overlay" style={{ zIndex: 10 }}></div>
       <div ref={spotlightRef} className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-200 group-hover/card:opacity-100" style={{ zIndex: 5 }} />
 
-      {/* ACTION BUTTONS (Select, Tag, Menu) 
-          If there's a sticky note, they gracefully slide left. If not, they hug the right edge. */}
+      {/* ACTION BUTTONS (Select, Tag, Menu) */}
       {canModify && (
          <div className={`absolute top-4 flex items-center gap-2 pointer-events-auto transition-all duration-300 ease-out ${hasSticky ? 'right-25' : 'right-4'}`} ref={controlsRef} style={{ zIndex: 30 }}>
             
@@ -373,8 +405,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                    </div>
                 )}
              </motion.div>
-         </div>,
-         document.body
+         </div>, document.body
       )}
 
       <div className={`flex flex-col w-full h-full relative z-0 ${isSelected ? 'opacity-80' : ''}`}>

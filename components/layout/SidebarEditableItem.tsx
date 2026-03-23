@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { MoreVertical, Edit2, Trash2, ArrowUp, ArrowDown, Check, X } from 'lucide-react';
 
-export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, onDelete, onMoveUp, onMoveDown, onDropItem, theme, isDark, canModify }: any) => {
+export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, onDelete, onMoveUp, onMoveDown, onDropItem, onDropItems, onDropFiles, theme, isDark, canModify }: any) => {
    const [isMenuOpen, setIsMenuOpen] = useState(false);
    const [isEditing, setIsEditing] = useState(false);
    const [editValue, setEditValue] = useState(label);
    const [mounted, setMounted] = useState(false);
    const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0 });
+   const [isDragOver, setIsDragOver] = useState(false); 
    const menuRef = useRef<HTMLDivElement>(null);
 
    useEffect(() => {
@@ -52,19 +53,63 @@ export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, on
        setIsMenuOpen(true);
    };
 
+   // --- WINDOWS-LIKE DRAG AND DROP HANDLERS ---
+   const handleDragEnter = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(true);
+   };
+
+   const handleDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+   };
+
+   const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'copy';
+   };
+
+   const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault(); 
+      e.stopPropagation();
+      setIsDragOver(false);
+      
+      // 1. Handle Multi-Item Drop (Dragging multiple selected cards)
+      const multiData = e.dataTransfer.getData('application/x-brainboard-items');
+      if (multiData && onDropItems) {
+         try {
+            const parsedIds = JSON.parse(multiData);
+            onDropItems(parsedIds);
+            return;
+         } catch (err) {}
+      }
+
+      // 2. Handle Single Item Drop
+      const singleData = e.dataTransfer.getData('application/x-brainboard-item');
+      if (singleData && onDropItem) {
+         try {
+             const parsed = JSON.parse(singleData);
+             onDropItem(parsed.id);
+             return;
+         } catch (err) {}
+      }
+
+      // 3. Handle External Files dropped directly onto this folder from Desktop
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0 && onDropFiles) {
+          onDropFiles(Array.from(e.dataTransfer.files));
+      }
+   };
+
    return (
       <div 
          className="relative group w-full"
-         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-         onDrop={(e) => {
-            e.preventDefault(); 
-            e.stopPropagation();
-            const data = e.dataTransfer.getData('application/x-brainboard-item');
-            if (data && onDropItem) {
-               const parsed = JSON.parse(data);
-               onDropItem(parsed.id);
-            }
-         }}
+         onDragEnter={handleDragEnter}
+         onDragLeave={handleDragLeave}
+         onDragOver={handleDragOver}
+         onDrop={handleDrop}
       >
          {isEditing ? (
             <div className={`flex items-center gap-2 px-3 py-2 rounded-2xl border shadow-sm ${theme.card}`}>
@@ -83,9 +128,15 @@ export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, on
             <div className="flex items-center relative">
                <button 
                    onClick={onClick} 
-                   className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-bold transition-all ${active ? (isDark ? 'bg-white/10 text-white shadow-inner' : 'bg-black/5 text-black shadow-inner') : `${theme.textMuted} ${theme.btnGhost}`}`}
+                   className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-bold transition-all border border-transparent ${
+                      isDragOver 
+                         ? 'bg-teal-500/20 text-teal-500 border-teal-500/50 shadow-inner scale-[1.02]' // Glowing drop zone
+                         : active 
+                            ? (isDark ? 'bg-white/10 text-white shadow-inner' : 'bg-black/5 text-black shadow-inner') 
+                            : `${theme.textMuted} ${theme.btnGhost}`
+                   }`}
                >
-                   <span className={active ? 'text-teal-500' : ''}>{icon}</span>
+                   <span className={active || isDragOver ? 'text-teal-500' : ''}>{icon}</span>
                    <span className="truncate">{label}</span>
                </button>
                

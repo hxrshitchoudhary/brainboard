@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Inter } from 'next/font/google';
 import { Toaster, toast as sonnerToast } from 'sonner';
 import { Command } from 'cmdk';
-import { DialogTitle, DialogDescription } from '@radix-ui/react-dialog';
 import { supabase } from '@/lib/supabase'; 
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow } from 'date-fns';
 
@@ -730,11 +729,15 @@ export default function BrainboardBalanced() {
     return newArr;
   };
 
-  const processAndUploadFiles = async (files: File[]) => {
+  // --- WINDOWS-LIKE EXTERNAL FILE UPLOAD SUPPORT ---
+  const processAndUploadFiles = async (files: File[], targetFolderOverride?: string) => {
     if (nav.workspace === "team" && teamRole === "viewer") return showToast("Permission denied.", true);
     if (!session?.user?.id || files.length === 0) return;
 
     updateUi({ isUploading: true });
+
+    const targetFolder = targetFolderOverride || (nav.categoryType === "folder" ? nav.category : "Inbox");
+    const targetList = targetFolderOverride ? null : (nav.categoryType === "list" ? nav.category : null);
 
     for (const file of files) {
         let type = "document";
@@ -758,10 +761,10 @@ export default function BrainboardBalanced() {
               title: file.name, 
               thumbnail_url: publicUrl, 
               url: type !== "image" ? publicUrl : null, 
-              sections: nav.categoryType === "folder" ? [nav.category] : ["Inbox"], 
-              list_name: nav.categoryType === "list" ? nav.category : null
+              sections: [targetFolder], 
+              list_name: targetList
             });
-            showToast("File added!");
+            showToast(`File added to ${targetFolder}!`);
         } catch(error) {
             showToast("Upload failed", true);
             console.error(error);
@@ -982,7 +985,7 @@ export default function BrainboardBalanced() {
           {/* Navigation */}
           <nav className="relative z-50 w-full flex justify-between items-center px-6 md:px-12 py-6">
             <div className="font-black text-xl tracking-tighter flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-teal-400 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/20">
+              <div className="w-8 h-8 bg-linear-to-br from-teal-400 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/20">
                 <Sparkles size={16} className="text-black" />
               </div>
               brainboard.
@@ -999,7 +1002,7 @@ export default function BrainboardBalanced() {
             <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden flex justify-center items-center opacity-30 md:opacity-60">
                {/* Card 1 - Top Left */}
                <motion.div animate={{ y: [0, -20, 0], rotate: [-2, 0, -2] }} transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }} className="absolute top-[10%] left-[5%] md:left-[10%] w-56 h-72 bg-[#111113] border border-white/10 rounded-3xl shadow-2xl p-4 hidden md:flex flex-col gap-3">
-                  <div className="w-full h-32 bg-gradient-to-br from-teal-500/20 to-emerald-500/5 rounded-xl border border-white/5"></div>
+                  <div className="w-full h-32 bg-linear-to-br from-teal-500/20 to-emerald-500/5 rounded-xl border border-white/5"></div>
                   <div className="w-3/4 h-3 bg-white/20 rounded-full mt-2"></div>
                   <div className="w-1/2 h-3 bg-white/10 rounded-full"></div>
                   <div className="flex gap-2 mt-auto">
@@ -1032,7 +1035,7 @@ export default function BrainboardBalanced() {
             </div>
 
             {/* Content Foreground */}
-            <div className="relative z-10 flex flex-col items-center mt-[-40px]">
+            <div className="relative z-10 flex flex-col items-center -mt-10">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1048,9 +1051,9 @@ export default function BrainboardBalanced() {
                     transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }} 
                     className="text-6xl md:text-8xl font-black tracking-tighter mb-8 leading-[1.1] md:leading-[1.05] drop-shadow-2xl max-w-4xl"
                 >
-                    <span className="text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/60">Your </span>
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 via-cyan-400 to-emerald-400">second brain</span>
-                    <span className="text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/60">, <br className="hidden md:block"/> beautifully curated.</span>
+                    <span className="text-transparent bg-clip-text bg-linear-to-b from-white via-white to-white/60">Your </span>
+                    <span className="text-transparent bg-clip-text bg-linear-to-r from-teal-400 via-cyan-400 to-emerald-400">second brain</span>
+                    <span className="text-transparent bg-clip-text bg-linear-to-b from-white via-white to-white/60">, <br className="hidden md:block"/> beautifully curated.</span>
                 </motion.h1>
 
                 <motion.p
@@ -1073,7 +1076,7 @@ export default function BrainboardBalanced() {
                       className="group relative flex items-center justify-center gap-3 bg-white text-black px-8 py-4 rounded-full text-base font-bold transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_rgba(20,184,166,0.3)] hover:shadow-[0_0_60px_rgba(20,184,166,0.5)] overflow-hidden"
                   >
                       {/* Shine effect on hover */}
-                      <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
+                      <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-linear-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
                       
                       <svg className="w-5 h-5 mr-1" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -1174,37 +1177,34 @@ export default function BrainboardBalanced() {
           open={cmdKOpen} 
           onOpenChange={setCmdKOpen} 
           label="Global Command Menu" 
-          className={`fixed top-[20%] left-1/2 transform -translate-x-1/2 w-[90%] md:w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden backdrop-blur-3xl border ${isDark ? "bg-[#0E0E12]/80 border-white/10 text-zinc-100" : "bg-white/95 border-black/10 text-zinc-900"}`} 
+          className={`fixed top-[20%] left-1/2 transform -translate-x-1/2 w-[90%] md:w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden backdrop-blur-3xl border ${isDark ? "bg-[#0E0E12]/80 border-white/10" : "bg-white/80 border-black/5"}`} 
           style={{ zIndex: 9999 }}
       >
-         <DialogTitle className="sr-only">Global Command Menu</DialogTitle>
-         <DialogDescription className="sr-only">Search for commands, create items, or navigate spaces.</DialogDescription>
-
-         <Command.Input placeholder="Type a command or search..." className={`w-full p-6 bg-transparent outline-none text-xl font-medium border-b ${isDark ? "border-white/5" : "border-black/5 text-zinc-900"}`} />
+         <Command.Input placeholder="Type a command or search..." className="w-full p-6 bg-transparent outline-none text-xl font-medium text-zinc-900 dark:text-zinc-100 border-b border-black/5 dark:border-white/5" />
          <Command.List className="p-3 max-h-[50vh] overflow-y-auto custom-scrollbar">
             <Command.Empty className="p-6 text-center text-sm font-medium text-stone-500">No results found.</Command.Empty>
             <Command.Group heading="General Actions" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 p-2">
-               <Command.Item onSelect={() => { handleNewNote(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
+               <Command.Item onSelect={() => { handleNewNote(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    <Plus size={18} /> Create New Note
                </Command.Item>
-               <Command.Item onSelect={() => { handleNewChecklist(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
+               <Command.Item onSelect={() => { handleNewChecklist(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    <CheckSquare size={18} /> Create New Checklist
                </Command.Item>
-               <Command.Item onSelect={() => { fileInputRef.current?.click(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
+               <Command.Item onSelect={() => { fileInputRef.current?.click(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    <UploadCloud size={18} /> Upload File / Media
                </Command.Item>
             </Command.Group>
             <Command.Group heading="Navigation" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 p-2 mt-4">
-               <Command.Item onSelect={() => { updateNav({ workspace: "personal" }); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
+               <Command.Item onSelect={() => { updateNav({ workspace: "personal" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    <Users size={18} /> Switch to Personal Workspace
                </Command.Item>
-               <Command.Item onSelect={() => { updateNav({ workspace: "team" }); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
+               <Command.Item onSelect={() => { updateNav({ workspace: "team" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    <Users size={18} /> Switch to Team Workspace
                </Command.Item>
-               <Command.Item onSelect={() => { updateNav({ categoryType: "trash", category: "All" }); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
+               <Command.Item onSelect={() => { updateNav({ categoryType: "trash", category: "All" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    <Trash2 size={18} /> Go to Trash
                </Command.Item>
-               <Command.Item onSelect={() => { toggleTheme(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
+               <Command.Item onSelect={() => { toggleTheme(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
                    {isDark ? <Sun size={18} /> : <Moon size={18} />} Toggle Theme
                </Command.Item>
             </Command.Group>
@@ -1391,6 +1391,8 @@ export default function BrainboardBalanced() {
                          onDelete={() => handleDeleteList(list)} 
                          onMoveUp={() => setListOrder(prev => moveArrayItem(prev, index, -1))} 
                          onMoveDown={() => setListOrder(prev => moveArrayItem(prev, index, 1))} 
+                         onDropItem={(itemId: string | number) => moveItemToList(itemId, list)} 
+                         onDropItems={(itemIds: (string | number)[]) => { bulkMoveToList(itemIds, list); setSelectedItems(new Set()); }}
                      />
                   ))}
                </div>
@@ -1442,19 +1444,22 @@ export default function BrainboardBalanced() {
                          onMoveUp={() => setFolderOrder(prev => moveArrayItem(prev, index, -1))} 
                          onMoveDown={() => setFolderOrder(prev => moveArrayItem(prev, index, 1))} 
                          onDropItem={(itemId: string | number) => moveItemToFolder(itemId, folder)} 
+                         onDropItems={(itemIds: (string | number)[]) => { bulkMoveToFolder(itemIds, folder); setSelectedItems(new Set()); }}
+                         onDropFiles={(files: File[]) => processAndUploadFiles(files, folder)}
                      />
                   ))}
                </div>
             </div>
          </div>
 
+         {/* Updated Profile Section matching the design request */}
          <div className="p-4 mt-auto border-t border-white/5">
-           <button onClick={() => updateUi({ isAccountOpen: true })} className={`flex items-center gap-3 w-full text-left px-3 py-2.5 rounded-2xl transition-all cursor-pointer active:scale-95 ${theme.btnGhost}`}>
-             <img src={currentAvatar} className={`w-9 h-9 rounded-full object-cover shadow-sm ring-2 ${isDark ? "ring-white/10" : "ring-[#e8e4dc]"}`} alt="Avatar" />
+           <button onClick={() => updateUi({ isAccountOpen: true })} className={`flex items-center gap-3 w-full text-left px-3 py-3 rounded-2xl transition-all cursor-pointer active:scale-95 ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}>
+             <img src={currentAvatar} className={`w-7 h-7 rounded-full object-cover shadow-sm ring-1 ${isDark ? "ring-white/20" : "ring-black/10"}`} alt="Avatar" />
              <div className="flex-1 min-w-0">
-               <h3 className="font-bold text-sm tracking-tight truncate leading-tight">{userDisplayName}</h3>
+               <h3 className={`font-bold text-[10px] uppercase tracking-widest truncate leading-tight ${isDark ? 'text-zinc-400' : 'text-stone-500'}`}>{userDisplayName}</h3>
              </div>
-             <Settings size={18} strokeWidth={1.5} className="opacity-50"/>
+             <Settings size={14} strokeWidth={2} className={theme.textMuted}/>
            </button>
          </div>
       </aside>
@@ -1736,12 +1741,12 @@ export default function BrainboardBalanced() {
                 <Trash2 size={16} strokeWidth={2} /> <span className="hidden md:inline">Empty Trash</span>
               </button>
             ) : (
-              <div className={`flex items-center gap-1 p-1.5 border shadow-sm rounded-2xl ${isDark ? "bg-[#18181B] border-white/5" : "bg-white border-black/5"}`}>
+              <div className="flex gap-3">
                 {canCreate && (
                    <>
                       <div className="relative group/tooltip flex items-center justify-center">
-                         <button aria-label="Upload Files" onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`w-10 h-10 flex items-center justify-center transition-all active:scale-95 rounded-xl ${isDark ? "hover:bg-white/10 text-zinc-400" : "hover:bg-black/5 text-zinc-600"}`}>
-                            <ImageIcon size={18} strokeWidth={1.5} />
+                         <button aria-label="Upload Files" onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? "bg-[#18181B] border-white/5 hover:bg-white/10" : "bg-white border-black/5 hover:bg-black/5"}`}>
+                            <ImageIcon size={18} strokeWidth={1.5} className={isDark ? "text-zinc-400" : "text-zinc-600"} />
                          </button>
                          <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                              Upload File
@@ -1749,15 +1754,15 @@ export default function BrainboardBalanced() {
                       </div>
                       
                       <div className="relative group/tooltip flex items-center justify-center">
-                         <button aria-label="New Checklist" onClick={handleNewChecklist} className={`w-10 h-10 flex items-center justify-center transition-all active:scale-95 rounded-xl ${isDark ? "hover:bg-white/10 text-zinc-400" : "hover:bg-black/5 text-zinc-600"}`}>
-                            <CheckSquare size={18} strokeWidth={1.5} />
+                         <button aria-label="New Checklist" onClick={handleNewChecklist} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? "bg-[#18181B] border-white/5 hover:bg-white/10" : "bg-white border-black/5 hover:bg-black/5"}`}>
+                            <CheckSquare size={18} strokeWidth={1.5} className={isDark ? "text-zinc-400" : "text-zinc-600"} />
                          </button>
                          <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                              New Checklist
                          </div>
                       </div>
 
-                      <button aria-label="New Note" onClick={handleNewNote} className={`h-10 px-5 text-sm font-bold flex items-center gap-2 rounded-xl transition-colors shadow-sm ml-1 ${theme.btnPrimary}`}>
+                      <button aria-label="New Note" onClick={handleNewNote} className={`h-11 px-6 text-sm font-bold flex items-center gap-2 rounded-[14px] transition-colors shadow-sm ${theme.btnPrimary}`}>
                          <Plus size={18} strokeWidth={2.5} /> <span className="hidden md:inline">New Note</span>
                       </button>
                    </>
@@ -1853,10 +1858,10 @@ export default function BrainboardBalanced() {
                   <AnimatePresence mode="wait">
                     <motion.div 
                         key={nav.viewMode}
-                        initial={{ opacity: 0, filter: "blur(4px)", scale: 0.98 }}
-                        animate={{ opacity: 1, filter: "blur(0px)", scale: 1 }}
-                        exit={{ opacity: 0, filter: "blur(4px)", scale: 0.98 }}
-                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -15 }}
+                        transition={{ duration: 0.2, ease: "easeInOut" }}
                         className={`pointer-events-auto pb-10 w-full ${
                             nav.viewMode === "list" ? "flex flex-col gap-4" : 
                             nav.viewMode === "grid" ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6" : 
@@ -1867,7 +1872,7 @@ export default function BrainboardBalanced() {
                           {filteredData.map((item, index) => (
                               <motion.div 
                                   key={item.id} 
-                                  layout="position"
+                                  layout={nav.viewMode !== 'grid' ? "position" : false} 
                                   variants={cardVariants} 
                                   initial="hidden" 
                                   animate="visible" 
@@ -1899,6 +1904,7 @@ export default function BrainboardBalanced() {
                                      toggleItemReaction={toggleItemReaction} 
                                      toggleChecklistItem={toggleChecklistItem} 
                                      isSelected={selectedItems.has(item.id)} 
+                                     selectedItems={Array.from(selectedItems)}
                                      onToggleSelect={handleToggleSelect} 
                                      isSelectMode={isSelectMode} 
                                      isActiveKeyboard={activeIndex === index} 
