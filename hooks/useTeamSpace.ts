@@ -27,6 +27,25 @@ export function useTeamSpace(
   useEffect(() => { navWorkspaceRef.current = navWorkspace; }, [navWorkspace]);
   useEffect(() => { onlineUsersRef.current = onlineUsers; }, [onlineUsers]);
 
+  // Load notifications from local storage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && session?.user?.id) {
+       const saved = localStorage.getItem(`bb-notifications-${session.user.id}`);
+       if (saved) {
+           try {
+               setNotifications(JSON.parse(saved).map((n: any) => ({ ...n, time: new Date(n.time) })));
+           } catch (e) {}
+       }
+    }
+  }, [session?.user?.id]);
+
+  // Persist notifications to local storage (limit to latest 50 to prevent bloat)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && session?.user?.id) {
+        localStorage.setItem(`bb-notifications-${session.user.id}`, JSON.stringify(notifications.slice(0, 50)));
+    }
+  }, [notifications, session?.user?.id]);
+
   const fetchProfilesAndRole = useCallback(async (currentUser: any) => {
     try {
       const { data: workspaceData } = await supabase.from('workspace_members').select('*').eq('workspace_id', teamWorkspaceId);

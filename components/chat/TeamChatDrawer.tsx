@@ -20,7 +20,7 @@ export function TeamChatDrawer({
              animate={{ x: 0, opacity: 1 }} 
              exit={{ x: '100%', opacity: 0 }} 
              transition={sheetSpring}
-             className={`fixed top-0 right-0 w-full md:w-100 h-full shadow-[0_0_80px_rgba(0,0,0,0.5)] flex flex-col z-[200] ${isDark ? 'bg-[#09090b]' : 'bg-[#fcfaf8] border-l border-stone-200'}`}
+             className={`fixed top-0 right-0 w-full md:w-100 h-full shadow-[0_0_80px_rgba(0,0,0,0.5)] flex flex-col z-200 ${isDark ? 'bg-[#09090b]' : 'bg-[#fcfaf8] border-l border-stone-200'}`}
            >
              <div className={`px-6 py-5 flex justify-between items-center border-b w-full shrink-0 ${isDark ? 'border-white/5 bg-[#09090b]' : 'border-black/5 bg-[#fcfaf8]'}`}>
                 <h3 className="font-black tracking-tight text-xl flex items-center gap-2">

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Inter } from 'next/font/google';
 import { Toaster, toast as sonnerToast } from 'sonner';
 import { Command } from 'cmdk';
+import { DialogTitle, DialogDescription } from '@radix-ui/react-dialog';
 import { supabase } from '@/lib/supabase'; 
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow } from 'date-fns';
 
@@ -1173,34 +1174,37 @@ export default function BrainboardBalanced() {
           open={cmdKOpen} 
           onOpenChange={setCmdKOpen} 
           label="Global Command Menu" 
-          className={`fixed top-[20%] left-1/2 transform -translate-x-1/2 w-[90%] md:w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden backdrop-blur-3xl border ${isDark ? "bg-[#0E0E12]/80 border-white/10" : "bg-white/80 border-black/5"}`} 
+          className={`fixed top-[20%] left-1/2 transform -translate-x-1/2 w-[90%] md:w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden backdrop-blur-3xl border ${isDark ? "bg-[#0E0E12]/80 border-white/10 text-zinc-100" : "bg-white/95 border-black/10 text-zinc-900"}`} 
           style={{ zIndex: 9999 }}
       >
-         <Command.Input placeholder="Type a command or search..." className="w-full p-6 bg-transparent outline-none text-xl font-medium text-zinc-900 dark:text-zinc-100 border-b border-black/5 dark:border-white/5" />
+         <DialogTitle className="sr-only">Global Command Menu</DialogTitle>
+         <DialogDescription className="sr-only">Search for commands, create items, or navigate spaces.</DialogDescription>
+
+         <Command.Input placeholder="Type a command or search..." className={`w-full p-6 bg-transparent outline-none text-xl font-medium border-b ${isDark ? "border-white/5" : "border-black/5 text-zinc-900"}`} />
          <Command.List className="p-3 max-h-[50vh] overflow-y-auto custom-scrollbar">
             <Command.Empty className="p-6 text-center text-sm font-medium text-stone-500">No results found.</Command.Empty>
             <Command.Group heading="General Actions" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 p-2">
-               <Command.Item onSelect={() => { handleNewNote(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { handleNewNote(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
                    <Plus size={18} /> Create New Note
                </Command.Item>
-               <Command.Item onSelect={() => { handleNewChecklist(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { handleNewChecklist(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
                    <CheckSquare size={18} /> Create New Checklist
                </Command.Item>
-               <Command.Item onSelect={() => { fileInputRef.current?.click(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { fileInputRef.current?.click(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
                    <UploadCloud size={18} /> Upload File / Media
                </Command.Item>
             </Command.Group>
             <Command.Group heading="Navigation" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 p-2 mt-4">
-               <Command.Item onSelect={() => { updateNav({ workspace: "personal" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { updateNav({ workspace: "personal" }); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
                    <Users size={18} /> Switch to Personal Workspace
                </Command.Item>
-               <Command.Item onSelect={() => { updateNav({ workspace: "team" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { updateNav({ workspace: "team" }); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
                    <Users size={18} /> Switch to Team Workspace
                </Command.Item>
-               <Command.Item onSelect={() => { updateNav({ categoryType: "trash", category: "All" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { updateNav({ categoryType: "trash", category: "All" }); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
                    <Trash2 size={18} /> Go to Trash
                </Command.Item>
-               <Command.Item onSelect={() => { toggleTheme(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { toggleTheme(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/5 text-zinc-100" : "hover:bg-black/5 text-stone-800"}`}>
                    {isDark ? <Sun size={18} /> : <Moon size={18} />} Toggle Theme
                </Command.Item>
             </Command.Group>
@@ -1732,12 +1736,12 @@ export default function BrainboardBalanced() {
                 <Trash2 size={16} strokeWidth={2} /> <span className="hidden md:inline">Empty Trash</span>
               </button>
             ) : (
-              <div className="flex gap-3">
+              <div className={`flex items-center gap-1 p-1.5 border shadow-sm rounded-2xl ${isDark ? "bg-[#18181B] border-white/5" : "bg-white border-black/5"}`}>
                 {canCreate && (
                    <>
                       <div className="relative group/tooltip flex items-center justify-center">
-                         <button aria-label="Upload Files" onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? "bg-[#18181B] border-white/5 hover:bg-white/10" : "bg-white border-black/5 hover:bg-black/5"}`}>
-                            <ImageIcon size={18} strokeWidth={1.5} className={isDark ? "text-zinc-400" : "text-zinc-600"} />
+                         <button aria-label="Upload Files" onClick={() => fileInputRef.current?.click()} disabled={ui.isUploading} className={`w-10 h-10 flex items-center justify-center transition-all active:scale-95 rounded-xl ${isDark ? "hover:bg-white/10 text-zinc-400" : "hover:bg-black/5 text-zinc-600"}`}>
+                            <ImageIcon size={18} strokeWidth={1.5} />
                          </button>
                          <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                              Upload File
@@ -1745,15 +1749,15 @@ export default function BrainboardBalanced() {
                       </div>
                       
                       <div className="relative group/tooltip flex items-center justify-center">
-                         <button aria-label="New Checklist" onClick={handleNewChecklist} className={`w-11 h-11 flex items-center justify-center transition-all active:scale-95 shadow-sm rounded-[14px] border ${isDark ? "bg-[#18181B] border-white/5 hover:bg-white/10" : "bg-white border-black/5 hover:bg-black/5"}`}>
-                            <CheckSquare size={18} strokeWidth={1.5} className={isDark ? "text-zinc-400" : "text-zinc-600"} />
+                         <button aria-label="New Checklist" onClick={handleNewChecklist} className={`w-10 h-10 flex items-center justify-center transition-all active:scale-95 rounded-xl ${isDark ? "hover:bg-white/10 text-zinc-400" : "hover:bg-black/5 text-zinc-600"}`}>
+                            <CheckSquare size={18} strokeWidth={1.5} />
                          </button>
                          <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                              New Checklist
                          </div>
                       </div>
 
-                      <button aria-label="New Note" onClick={handleNewNote} className={`h-11 px-6 text-sm font-bold flex items-center gap-2 rounded-[14px] transition-colors shadow-sm ${theme.btnPrimary}`}>
+                      <button aria-label="New Note" onClick={handleNewNote} className={`h-10 px-5 text-sm font-bold flex items-center gap-2 rounded-xl transition-colors shadow-sm ml-1 ${theme.btnPrimary}`}>
                          <Plus size={18} strokeWidth={2.5} /> <span className="hidden md:inline">New Note</span>
                       </button>
                    </>

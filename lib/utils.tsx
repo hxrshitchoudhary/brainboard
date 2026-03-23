@@ -1,4 +1,5 @@
 import React from 'react';
+import { Variants } from 'framer-motion';
 
 // --- HIGHLY ROUNDED SMOOTH PHYSICS & ANIMATIONS ---
 export const modalSpring = { type: "spring" as const, bounce: 0.3, duration: 0.6 };
@@ -6,15 +7,16 @@ export const sheetSpring = { type: "spring" as const, bounce: 0.2, duration: 0.7
 export const bounceHover = { scale: 1.04, transition: { type: "spring" as const, bounce: 0.5 } };
 export const bounceTap = { scale: 0.94, transition: { type: "spring" as const, bounce: 0.5 } };
 
-export const staggerVariants = { 
+export const staggerVariants: Variants = { 
   hidden: { opacity: 0 }, 
   visible: { opacity: 1, transition: { staggerChildren: 0.04, delayChildren: 0.05 } } 
 };
 
-export const cardVariants = { 
-  hidden: { opacity: 0, y: 24, filter: "blur(8px)", scale: 0.96 }, 
-  visible: { opacity: 1, y: 0, filter: "blur(0px)", scale: 1, transition: { duration: 0.4, type: "spring" as const, bounce: 0.3 } },
-  exit: { opacity: 0, scale: 0.96, filter: "blur(4px)", transition: { duration: 0.15 } }
+// Removed heavy CSS blur and spring physics for snappier, jitter-free view transitions
+export const cardVariants: Variants = { 
+  hidden: { opacity: 0, y: 15, scale: 0.98 }, 
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.25, ease: "easeOut" } },
+  exit: { opacity: 0, scale: 0.98, transition: { duration: 0.15, ease: "easeIn" } }
 };
 
 export const downloadMedia = async (url: string, filename: string) => {
