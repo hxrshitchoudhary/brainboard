@@ -15,7 +15,7 @@ import {
   FileText, Globe, Compass, ChevronRight, UploadCloud, 
   List as ListIcon, Calendar as CalendarIcon, ChevronLeft, ChevronRight as ChevronRightIcon, 
   Users, CheckCircle, MessageSquare, AlignJustify, Monitor, CheckSquare, Columns,
-  Bell, Circle, RotateCcw, X, Hash, Command as CmdIcon
+  Bell, Circle, RotateCcw, X, Hash, Command as CmdIcon, MinusCircle
 } from "lucide-react";
 
 // --- TYPES & STORE ---
@@ -44,7 +44,6 @@ const inter = Inter({ subsets: ['latin'] });
 
 // Safe constants to prevent Turbopack parsing errors
 const NOISE_BG = "url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZmlsdGVyIGlkPSJub2lzZUZpbHRlciI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iNCIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZUZpbHRlcikiLz48L3N2Zz4=')";
-const INJECTED_CSS = ".custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.1); border-radius: 10px; transition: all 0.3s; } .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(150,150,150,0.3); } @keyframes shimmer { 100% { transform: translateX(100%); } } .animate-shimmer { animation: shimmer 2s infinite linear; }";
 
 export default function BrainboardBalanced() {
   const [session, setSession] = useState<any>(null);
@@ -729,6 +728,44 @@ export default function BrainboardBalanced() {
     return newArr;
   };
 
+  // --- NEW: Remove from Context (Kick out of folder/list/type safely) ---
+  const handleRemoveFromContext = useCallback((itemId: string | number) => {
+      const strId = String(itemId);
+      const item = items.find(i => String(i.id) === strId);
+      if (!item) return;
+
+      if (nav.categoryType === 'folder') {
+          const newSections = (item.sections || []).filter((s: string) => s !== nav.category);
+          setItems(prev => prev.map(i => String(i.id) === strId ? { ...i, sections: newSections.length > 0 ? newSections : undefined, section: undefined } : i));
+          if (!strId.startsWith('temp-')) {
+              supabase.from('assets').update({ sections: newSections.length > 0 ? newSections : null, section: null }).eq('id', itemId).then(({error}) => {
+                  if (error) {
+                      supabase.from('assets').update({ sections: newSections.length > 0 ? newSections : null }).eq('id', itemId).then();
+                  }
+              });
+          }
+          showToast(`Removed from ${nav.category}`);
+      } else if (nav.categoryType === 'list') {
+          setItems(prev => prev.map(i => String(i.id) === strId ? { ...i, list_name: undefined } : i));
+          if (!strId.startsWith('temp-')) {
+              supabase.from('assets').update({ list_name: null }).eq('id', itemId).then();
+          }
+          showToast(`Removed from ${nav.category}`);
+      } else if (nav.categoryType === 'pinned') {
+          setItems(prev => prev.map(i => String(i.id) === strId ? { ...i, is_pinned: false } : i));
+          if (!strId.startsWith('temp-')) {
+              supabase.from('assets').update({ is_pinned: false }).eq('id', itemId).then();
+          }
+          showToast(`Unpinned item`);
+      } else if (nav.categoryType === 'type') {
+          setItems(prev => prev.map(i => String(i.id) === strId ? { ...i, type: 'uncategorized' } : i));
+          if (!strId.startsWith('temp-')) {
+              supabase.from('assets').update({ type: 'uncategorized' }).eq('id', itemId).then();
+          }
+          showToast(`Removed from ${nav.category}`);
+      }
+  }, [items, nav.categoryType, nav.category, setItems, showToast]);
+
   // --- WINDOWS-LIKE EXTERNAL FILE UPLOAD SUPPORT ---
   const processAndUploadFiles = async (files: File[], targetFolderOverride?: string) => {
     if (nav.workspace === "team" && teamRole === "viewer") return showToast("Permission denied.", true);
@@ -755,14 +792,14 @@ export default function BrainboardBalanced() {
             
             await insertItem({
               user_id: session.user.id, 
-              workspace_id: nav.workspace === "team" ? teamWorkspaceId : null,
+              workspace_id: nav.workspace === "team" ? teamWorkspaceId : undefined,
               creator: activeStateRef.current.userName, 
               type: type, 
               title: file.name, 
               thumbnail_url: publicUrl, 
-              url: type !== "image" ? publicUrl : null, 
+              url: type !== "image" ? publicUrl : undefined, 
               sections: [targetFolder], 
-              list_name: targetList
+              list_name: targetList || undefined
             });
             showToast(`File added to ${targetFolder}!`);
         } catch(error) {
@@ -889,15 +926,15 @@ export default function BrainboardBalanced() {
 
              const dbPayload: any = {
                  user_id: session.user.id, 
-                 workspace_id: workspace === "team" ? teamWorkspaceId : null, 
+                 workspace_id: workspace === "team" ? teamWorkspaceId : undefined, 
                  creator: userName,
                  type: isYouTube || isReel ? "social_video" : "link", 
                  url: text, 
                  title: fetchedTitle, 
-                 content: fetchedDescription, 
-                 thumbnail_url: fetchedThumbnail,
+                 content: fetchedDescription || undefined, 
+                 thumbnail_url: fetchedThumbnail || undefined,
                  sections: newItem.sections, 
-                 list_name: newItem.list_name || null
+                 list_name: newItem.list_name || undefined
              };
              
              Object.keys(dbPayload).forEach(key => { 
@@ -918,13 +955,13 @@ export default function BrainboardBalanced() {
          } catch (err) {
              const fallbackPayload = {
                  user_id: session.user.id, 
-                 workspace_id: workspace === "team" ? teamWorkspaceId : null,
+                 workspace_id: workspace === "team" ? teamWorkspaceId : undefined,
                  creator: userName, 
                  type: isYouTube || isReel ? "social_video" : "link", 
                  url: text, 
                  title: "Saved Link", 
                  sections: newItem.sections,
-                 thumbnail_url: isYouTube && youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null
+                 thumbnail_url: isYouTube && youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : undefined
              };
              const { data: dbData } = await supabase.from("assets").insert([fallbackPayload]).select().single();
              if (dbData) {
@@ -1142,6 +1179,7 @@ export default function BrainboardBalanced() {
          )}
       </AnimatePresence>
 
+      {/* NEW Empty Trash Confirmation Modal */}
       <AnimatePresence>
          {showTrashConfirm && (
             <div className="fixed inset-0 z-99999 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowTrashConfirm(false)}>
@@ -1398,6 +1436,7 @@ export default function BrainboardBalanced() {
                </div>
             </div>
 
+            {/* Folders Moved Under Content */}
             <div>
                <div className="flex items-center justify-between px-3 mb-2 group">
                  <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} opacity-70`}>Folders</h4>
@@ -1598,6 +1637,14 @@ export default function BrainboardBalanced() {
                                 <ListIcon size={14} className={isDark ? "text-zinc-400" : "text-zinc-500"} /> <span className="hidden sm:inline">Add to List</span>
                             </button>
                          </div>
+                         {(nav.categoryType === 'folder' || nav.categoryType === 'list' || nav.categoryType === 'pinned' || nav.categoryType === 'type') && (
+                            <button onClick={() => { 
+                               Array.from(selectedItems).forEach(id => handleRemoveFromContext(id)); 
+                               setSelectedItems(new Set()); 
+                            }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-orange-500 transition-colors ${isDark ? 'hover:bg-orange-500/10' : 'hover:bg-orange-50'}`}>
+                                <MinusCircle size={14} className="text-orange-500" /> <span className="hidden sm:inline">Remove</span>
+                            </button>
+                         )}
                          <button onClick={() => { bulkMoveToTrash(Array.from(selectedItems)); setSelectedItems(new Set()); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 transition-colors ${isDark ? 'hover:bg-red-500/10' : 'hover:bg-red-50'}`}>
                              <Trash2 size={14} /> <span className="hidden sm:inline">Trash</span>
                          </button>
@@ -1972,6 +2019,9 @@ export default function BrainboardBalanced() {
                                      isActiveKeyboard={activeIndex === index} 
                                      onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
                                      onClick={(e: any) => handleOpenItem(item)} 
+                                     currentCategoryType={nav.categoryType}
+                                     currentCategory={nav.category}
+                                     onRemoveFromContext={handleRemoveFromContext}
                                  />
                               </motion.div>
                           ))}

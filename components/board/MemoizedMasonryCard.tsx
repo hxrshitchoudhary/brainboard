@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
-import { MoreHorizontal, Folder, List as ListIcon, FileText, X, RotateCcw, Trash2, Clock, CheckSquare, Square, Music, File as FileIcon, ImageIcon, Globe, Play, Circle, Hash, Check, ChevronRight, ChevronLeft } from 'lucide-react';
+import { MoreHorizontal, Folder, List as ListIcon, FileText, X, RotateCcw, Trash2, Clock, CheckSquare, Square, Music, File as FileIcon, ImageIcon, Globe, Play, Circle, Hash, Check, ChevronRight, ChevronLeft, MinusCircle } from 'lucide-react';
 import { cleanName } from '@/lib/utils';
 import { APPLE_EMOJIS } from './ReactionBar';
 
-export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFolders, customLists, onMoveToFolder, onMoveToList, onUpdateTags, onTagClick, item, theme, isDark, activeWorkspace, currentUserId, teamRole, viewMode, onClick, inTrash, onRestore, onHardDelete, onDelete, onUpdateSticky, toggleItemReaction, toggleChecklistItem, isSelected, onToggleSelect, isSelectMode, onPlayYouTube, teamMembers, isActiveKeyboard, selectedItems }: any) {
+export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFolders, customLists, onMoveToFolder, onMoveToList, onUpdateTags, onTagClick, item, theme, isDark, activeWorkspace, currentUserId, teamRole, viewMode, onClick, inTrash, onRestore, onHardDelete, onDelete, onUpdateSticky, toggleItemReaction, toggleChecklistItem, isSelected, onToggleSelect, isSelectMode, onPlayYouTube, teamMembers, isActiveKeyboard, selectedItems, currentCategoryType, currentCategory, onRemoveFromContext }: any) {
   const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
   const youtubeId = ytMatch ? ytMatch[1] : null;
   const isYouTube = !!youtubeId;
@@ -78,7 +78,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
   const handleStickyBlur = () => { setIsEditingSticky(false); if (stickyText !== item.ai_summary && onUpdateSticky) { onUpdateSticky(item.id, stickyText); } };
   
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => { 
-      e.dataTransfer.effectAllowed = 'all'; // <--- FIX: Prevents Safari/Chrome drop rejection
+      e.dataTransfer.effectAllowed = 'all'; 
       
       let dragPayload;
       const isMulti = isSelected && selectedItems && selectedItems.length > 1;
@@ -89,12 +89,10 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
           dragPayload = { type: 'single', payload: item.id };
       }
 
-      // SET GLOBAL STORE FOR BULLETPROOF DRAG
       if (typeof window !== 'undefined') {
           (window as any).__bb_drag = dragPayload;
       }
 
-      // CREATE iOS-LIKE MINIMIZED DRAG BADGE
       const badge = document.createElement('div');
       badge.id = 'ios-drag-badge';
       badge.style.position = 'absolute';
@@ -162,8 +160,6 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
       document.body.appendChild(badge);
       
       e.dataTransfer.setDragImage(badge, 25, 25);
-      
-      // Dual-transfer payload
       e.dataTransfer.setData('application/json', JSON.stringify(dragPayload));
       e.dataTransfer.setData('text/plain', JSON.stringify(dragPayload));
 
@@ -315,6 +311,17 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                             <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500"><span className="truncate max-w-20 font-medium text-xs">{item.list_name || 'None'}</span><ChevronRight size={14} /></div>
                          </button>
                          <div className={`w-full h-px my-1.5 mx-auto ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
+                         
+                         {/* Remove from Folder/List Context Action (List View) */}
+                         {(currentCategoryType === 'folder' || currentCategoryType === 'list' || currentCategoryType === 'pinned' || currentCategoryType === 'type') && onRemoveFromContext && (
+                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveFromContext(item.id); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors text-orange-500 hover:bg-orange-500/10 mt-0.5`}>
+                               <MinusCircle size={16} strokeWidth={2.5} className="text-orange-500" /> 
+                               {currentCategoryType === 'pinned' ? 'Unpin Item' : 
+                                currentCategoryType === 'list' ? 'Remove from list' : 
+                                `Remove from ${currentCategory}`}
+                            </button>
+                         )}
+
                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id); setIsCardMenuOpen(false); }} className="w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 hover:bg-red-500/10 text-red-500 transition-colors mt-0.5"><Trash2 size={16} strokeWidth={2.5} /> Delete Item</button>
                       </>
                    ) : menuView === 'folder' ? (
@@ -449,6 +456,17 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                       ) : (
                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setStickyText(""); onUpdateSticky(item.id, ""); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><X size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Remove Sticky</button>
                       )}
+                      
+                      {/* Remove from Folder/List Context Action (Grid View) */}
+                      {(currentCategoryType === 'folder' || currentCategoryType === 'list' || currentCategoryType === 'pinned' || currentCategoryType === 'type') && onRemoveFromContext && (
+                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveFromContext(item.id); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors text-orange-500 hover:bg-orange-500/10 mt-0.5`}>
+                            <MinusCircle size={16} strokeWidth={2.5} className="text-orange-500" /> 
+                            {currentCategoryType === 'pinned' ? 'Unpin Item' : 
+                             currentCategoryType === 'list' ? 'Remove from list' : 
+                             `Remove from ${currentCategory}`}
+                         </button>
+                      )}
+
                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id); setIsCardMenuOpen(false); }} className="w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 hover:bg-red-500/10 text-red-500 transition-colors mt-0.5"><Trash2 size={16} strokeWidth={2.5} /> Delete Item</button>
                    </>
                 ) : menuView === 'folder' ? (
