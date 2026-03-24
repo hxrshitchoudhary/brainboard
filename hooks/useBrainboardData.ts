@@ -39,7 +39,7 @@ export function useBrainboardData(
       } else if (data) {
         if (isLoadMore) {
            setItems(prev => {
-              const newItems = (data as BentoItem[]).filter(d => !prev.some(p => p.id === d.id));
+              const newItems = (data as BentoItem[]).filter(d => !prev.some(p => String(p.id) === String(d.id)));
               return [...prev, ...newItems];
            });
         } else {
@@ -84,15 +84,13 @@ export function useBrainboardData(
 
     Object.keys(payload).forEach(key => { if (payload[key] === null || payload[key] === undefined) delete payload[key]; });
     
-    // Store old state for this specific item just in case
-    const itemBeforeUpdate = items.find(i => i.id === noteToSave.id);
+    const itemBeforeUpdate = items.find(i => String(i.id) === String(noteToSave.id));
 
     try {
         if (isTemp) {
             const { data, error } = await supabase.from('assets').insert([payload]).select().single();
             if (error) {
                showToast("Database Error: Failed to save note.", true);
-               console.error(error);
             }
             if (data) {
                 setItems(prev => [data, ...prev.filter(i => String(i.id) !== String(noteToSave.id))]);
@@ -103,10 +101,7 @@ export function useBrainboardData(
             const { error } = await supabase.from('assets').update(payload).eq('id', noteToSave.id);
             
             if (error) {
-                // Revert only this item
-                if (itemBeforeUpdate) {
-                    setItems(prev => prev.map(i => i.id === noteToSave.id ? itemBeforeUpdate : i));
-                }
+                if (itemBeforeUpdate) setItems(prev => prev.map(i => String(i.id) === String(noteToSave.id) ? itemBeforeUpdate : i));
                 showToast("Database Error: Failed to update item. Reverting...", true);
             } else {
                 showToast("Updated successfully!");
@@ -121,9 +116,7 @@ export function useBrainboardData(
            setCustomLists(prev => [...new Set([...prev, payload.list_name as string])]);
         }
     } catch (e) {
-        if (itemBeforeUpdate) {
-             setItems(prev => prev.map(i => i.id === noteToSave.id ? itemBeforeUpdate : i));
-        }
+        if (itemBeforeUpdate) setItems(prev => prev.map(i => String(i.id) === String(noteToSave.id) ? itemBeforeUpdate : i));
         showToast("Network Error: Failed to save. Reverting...", true);
     }
   };
@@ -133,101 +126,191 @@ export function useBrainboardData(
       const { data, error } = await supabase.from('assets').insert([payload]).select().single();
       if (error) {
          showToast(`Database Error: ${error.message}`, true);
-         console.error(error);
       }
       if (data) setItems(prev => [data, ...prev]);
       return data;
     } catch (e) {
       showToast("Network Error: Failed to insert.", true);
-      console.error(e);
     }
   };
 
   const updateItemTags = async (id: string | number, newTags: string[]) => {
-    const oldTags = items.find(i => i.id === id)?.tags;
-    setItems(prev => prev.map(item => item.id === id ? { ...item, tags: newTags.length > 0 ? newTags : undefined } : item));
-    if (!String(id).startsWith('temp-')) {
+    const strId = String(id);
+    const oldItem = items.find(i => String(i.id) === strId);
+    setItems(prev => prev.map(item => String(item.id) === strId ? { ...item, tags: newTags.length > 0 ? newTags : undefined } : item));
+    if (!strId.startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ tags: newTags.length > 0 ? newTags : null }).eq('id', id);
         if (error) { 
-            setItems(prev => prev.map(item => item.id === id ? { ...item, tags: oldTags } : item));
+            if (oldItem) setItems(prev => prev.map(item => String(item.id) === strId ? oldItem : item));
             showToast("Failed to update tags.", true); 
         }
     }
   };
 
+  // --- BULLETPROOF FOLDER/LIST MOVEMENT ---
   const moveItemToFolder = async (itemId: string | number, folderName: string) => {
-    const oldSections = items.find(i => i.id === itemId)?.sections;
-    setItems(prev => prev.map(item => item.id === itemId ? { ...item, sections: [folderName] } : item));
+    const strId = String(itemId);
+    const oldItem = items.find(i => String(i.id) === strId);
+    
+    // Optimistic UI update: Erase legacy 'section' visually to ensure page.tsx filter catches 'sections'
+    setItems(prev => prev.map(item => String(item.id) === strId ? { ...item, sections: [folderName], section: undefined } : item));
     showToast(`Moved to ${folderName}`);
-    if (!String(itemId).startsWith('temp-')) {
+    
+    if (!strId.startsWith('temp-')) {
+        // ONLY update 'sections'. The 'section' column likely triggers a PostgREST schema error.
         const { error } = await supabase.from('assets').update({ sections: [folderName] }).eq('id', itemId);
         if (error) { 
-            setItems(prev => prev.map(item => item.id === itemId ? { ...item, sections: oldSections } : item));
+            if (oldItem) setItems(prev => prev.map(item => String(item.id) === strId ? oldItem : item));
             showToast("Failed to move item. Reverting...", true); 
+            console.error(error);
         }
     }
   };
 
   const moveItemToList = async (itemId: string | number, listName: string) => {
-    const oldList = items.find(i => i.id === itemId)?.list_name;
-    setItems(prev => prev.map(item => item.id === itemId ? { ...item, list_name: listName } : item));
+    const strId = String(itemId);
+    const oldItem = items.find(i => String(i.id) === strId);
+    setItems(prev => prev.map(item => String(item.id) === strId ? { ...item, list_name: listName } : item));
     showToast(`Added to list ${listName}`);
-    if (!String(itemId).startsWith('temp-')) {
+    if (!strId.startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ list_name: listName }).eq('id', itemId);
         if (error) { 
-            setItems(prev => prev.map(item => item.id === itemId ? { ...item, list_name: oldList } : item));
+            if (oldItem) setItems(prev => prev.map(item => String(item.id) === strId ? oldItem : item));
             showToast("Failed to add to list. Reverting...", true); 
         }
     }
   };
 
   const bulkMoveToFolder = async (ids: (string | number)[], folderName: string) => {
-    setItems(prev => prev.map(item => ids.includes(item.id) ? { ...item, sections: [folderName] } : item));
+    const strIds = ids.map(String);
+    const oldItems = items.filter(i => strIds.includes(String(i.id)));
+    
+    setItems(prev => prev.map(item => strIds.includes(String(item.id)) ? { ...item, sections: [folderName], section: undefined } : item));
     showToast(`Moved ${ids.length} items to ${folderName}`);
+    
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ sections: [folderName] }).in('id', realIds);
-        if (error) showToast("Bulk move failed. Refresh to sync.", true); 
+        if (error) {
+            setItems(prev => prev.map(item => {
+                const old = oldItems.find(o => String(o.id) === String(item.id));
+                return old ? old : item;
+            }));
+            showToast("Bulk move failed. Reverting...", true); 
+            console.error(error);
+        }
     }
   };
 
   const bulkMoveToList = async (ids: (string | number)[], listName: string) => {
-    setItems(prev => prev.map(item => ids.includes(item.id) ? { ...item, list_name: listName } : item));
+    const strIds = ids.map(String);
+    const oldItems = items.filter(i => strIds.includes(String(i.id)));
+    
+    setItems(prev => prev.map(item => strIds.includes(String(item.id)) ? { ...item, list_name: listName } : item));
     showToast(`Added ${ids.length} items to ${listName}`);
+    
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ list_name: listName }).in('id', realIds);
-        if (error) showToast("Bulk add failed. Refresh to sync.", true); 
+        if (error) {
+            setItems(prev => prev.map(item => {
+                const old = oldItems.find(o => String(o.id) === String(item.id));
+                return old ? old : item;
+            }));
+            showToast("Bulk add failed. Reverting...", true); 
+        }
     }
   };
 
   const bulkMoveToTrash = async (ids: (string | number)[]) => {
-    setItems(prev => prev.map(item => ids.includes(item.id) ? { ...item, is_deleted: true } : item));
+    const strIds = ids.map(String);
+    const oldItems = items.filter(i => strIds.includes(String(i.id)));
+    
+    setItems(prev => prev.map(item => strIds.includes(String(item.id)) ? { ...item, is_deleted: true } : item));
     showToast(`Moved ${ids.length} items to Trash`);
+    
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ is_deleted: true }).in('id', realIds);
-        if (error) showToast("Bulk delete failed. Refresh to sync.", true); 
+        if (error) {
+            setItems(prev => prev.map(item => {
+                const old = oldItems.find(o => String(o.id) === String(item.id));
+                return old ? old : item;
+            }));
+            showToast("Bulk delete failed. Reverting...", true); 
+        }
     }
   };
 
   const bulkRestoreFromTrash = async (ids: (string | number)[]) => {
-    setItems(prev => prev.map(item => ids.includes(item.id) ? { ...item, is_deleted: false } : item));
+    const strIds = ids.map(String);
+    const oldItems = items.filter(i => strIds.includes(String(i.id)));
+    
+    setItems(prev => prev.map(item => strIds.includes(String(item.id)) ? { ...item, is_deleted: false } : item));
     showToast(`Restored ${ids.length} items`);
+    
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ is_deleted: false }).in('id', realIds);
-        if (error) showToast("Bulk restore failed.", true); 
+        if (error) {
+            setItems(prev => prev.map(item => {
+                const old = oldItems.find(o => String(o.id) === String(item.id));
+                return old ? old : item;
+            }));
+            showToast("Bulk restore failed.", true); 
+        }
     }
   };
 
   const bulkHardDelete = async (ids: (string | number)[]) => {
-    setItems(prev => prev.filter(item => !ids.includes(item.id)));
+    const strIds = ids.map(String);
+    setItems(prev => prev.filter(item => !strIds.includes(String(item.id))));
     showToast(`Permanently deleted ${ids.length} items`);
+    
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').delete().in('id', realIds);
         if (error) showToast("Bulk hard delete failed.", true); 
+    }
+  };
+
+  const bulkPinItems = async (ids: (string | number)[]) => {
+    const strIds = ids.map(String);
+    const oldItems = items.filter(i => strIds.includes(String(i.id)));
+    
+    setItems(prev => prev.map(item => strIds.includes(String(item.id)) ? { ...item, is_pinned: true } : item));
+    showToast(`Pinned ${ids.length} items`);
+    
+    const realIds = ids.filter(id => !String(id).startsWith('temp-'));
+    if (realIds.length > 0) {
+        const { error } = await supabase.from('assets').update({ is_pinned: true }).in('id', realIds);
+        if (error) {
+            setItems(prev => prev.map(item => {
+                const old = oldItems.find(o => String(o.id) === String(item.id));
+                return old ? old : item;
+            }));
+            showToast("Failed to pin items. Reverting...", true); 
+        }
+    }
+  };
+
+  const bulkChangeType = async (ids: (string | number)[], type: string) => {
+    const strIds = ids.map(String);
+    const oldItems = items.filter(i => strIds.includes(String(i.id)));
+    
+    setItems(prev => prev.map(item => strIds.includes(String(item.id)) ? { ...item, type } : item));
+    showToast(`Changed type for ${ids.length} items`);
+    
+    const realIds = ids.filter(id => !String(id).startsWith('temp-'));
+    if (realIds.length > 0) {
+        const { error } = await supabase.from('assets').update({ type }).in('id', realIds);
+        if (error) {
+            setItems(prev => prev.map(item => {
+                const old = oldItems.find(o => String(o.id) === String(item.id));
+                return old ? old : item;
+            }));
+            showToast("Failed to change type.", true); 
+        }
     }
   };
 
@@ -246,7 +329,7 @@ export function useBrainboardData(
      }
 
      const reactionsString = Object.keys(reactions).length > 0 ? JSON.stringify(reactions) : null;
-     setItems(prev => prev.map(i => i.id === item.id ? { ...i, likes: reactionsString as any } : i));
+     setItems(prev => prev.map(i => String(i.id) === String(item.id) ? { ...i, likes: reactionsString as any } : i));
      
      if (!String(item.id).startsWith('temp-')) {
         try {
@@ -254,8 +337,7 @@ export function useBrainboardData(
            if (error) throw error;
         } catch (e) { 
            showToast("Failed to save reaction", true); 
-           // Revert visually if failed
-           setItems(prev => prev.map(i => i.id === item.id ? { ...i, likes: item.likes } : i));
+           setItems(prev => prev.map(i => String(i.id) === String(item.id) ? { ...i, likes: item.likes } : i));
         }
      }
   };
@@ -263,26 +345,27 @@ export function useBrainboardData(
   const toggleChecklistItem = async (item: BentoItem, clItemId: string) => {
      if (!item.checklist_items) return;
      const newItems = item.checklist_items.map((ci: any) => ci.id === clItemId ? { ...ci, checked: !ci.checked } : ci );
-     setItems(prev => prev.map(i => i.id === item.id ? { ...i, checklist_items: newItems } : i));
+     setItems(prev => prev.map(i => String(i.id) === String(item.id) ? { ...i, checklist_items: newItems } : i));
      
      if (!String(item.id).startsWith('temp-')) {
          try { 
              const { error } = await supabase.from('assets').update({ checklist_items: newItems }).eq('id', item.id); 
              if (error) throw error;
          } catch (e) { 
-             setItems(prev => prev.map(i => i.id === item.id ? { ...i, checklist_items: item.checklist_items } : i));
+             setItems(prev => prev.map(i => String(i.id) === String(item.id) ? { ...i, checklist_items: item.checklist_items } : i));
              showToast("Failed to update checklist", true); 
          }
      }
   };
 
   const updateStickyNote = async (id: string | number, newSummary: string) => {
-    const oldSummary = items.find(i => i.id === id)?.ai_summary;
-    setItems(prev => prev.map(item => item.id === id ? { ...item, ai_summary: newSummary } : item));
-    if (!String(id).startsWith('temp-')) {
+    const strId = String(id);
+    const oldItem = items.find(i => String(i.id) === strId);
+    setItems(prev => prev.map(item => String(item.id) === strId ? { ...item, ai_summary: newSummary } : item));
+    if (!strId.startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ ai_summary: newSummary }).eq('id', id);
         if (error) { 
-            setItems(prev => prev.map(item => item.id === id ? { ...item, ai_summary: oldSummary } : item));
+            if (oldItem) setItems(prev => prev.map(item => String(item.id) === strId ? oldItem : item));
             showToast("Failed to save note.", true); 
         }
     }
@@ -347,6 +430,7 @@ export function useBrainboardData(
     items, setItems, customFolders, setCustomFolders, customLists, setCustomLists,
     isLoading, page, setPage, hasMore, fetchItems, saveNote, insertItem, updateItemTags, moveItemToFolder, moveItemToList, updateStickyNote, toggleItemReaction, toggleChecklistItem,
     moveToTrash, restoreFromTrash, hardDelete, emptyTrash, renameFolder, deleteFolder, renameList, deleteList,
-    bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete 
+    bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete,
+    bulkPinItems, bulkChangeType
   };
 }

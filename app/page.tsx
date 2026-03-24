@@ -111,7 +111,8 @@ export default function BrainboardBalanced() {
     items, setItems, customFolders, setCustomFolders, customLists, setCustomLists,
     isLoading, page, setPage, hasMore, fetchItems, saveNote, insertItem, updateItemTags, moveItemToFolder, moveItemToList, updateStickyNote, toggleItemReaction, toggleChecklistItem,
     moveToTrash, restoreFromTrash, hardDelete, emptyTrash, renameFolder, deleteFolder, renameList, deleteList,
-    bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete
+    bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete,
+    bulkPinItems, bulkChangeType
   } = useBrainboardData(session, teamWorkspaceId, nav.workspace, profile.displayName, showToast, updateUi);
 
   const {
@@ -392,7 +393,6 @@ export default function BrainboardBalanced() {
     });
   }, [customLists]);
 
-  // Synchronous theme update
   const toggleTheme = () => {
     const nextTheme = !isDark; 
     if (typeof window !== "undefined") {
@@ -1142,7 +1142,6 @@ export default function BrainboardBalanced() {
          )}
       </AnimatePresence>
 
-      {/* NEW Empty Trash Confirmation Modal */}
       <AnimatePresence>
          {showTrashConfirm && (
             <div className="fixed inset-0 z-99999 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowTrashConfirm(false)}>
@@ -1325,76 +1324,77 @@ export default function BrainboardBalanced() {
             </div>
          </div>
 
-         <div className="flex-1 overflow-y-auto px-4 py-4 custom-scrollbar space-y-8">
+         <div className="flex-1 overflow-y-auto px-4 py-4 custom-scrollbar space-y-8 flex flex-col">
             <div>
                <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} px-3 mb-2 opacity-70`}>Overview</h4>
                <div className="space-y-0.5">
-                 <SidebarItem icon={<Compass size={16} strokeWidth={1.5}/>} label="Everything" active={nav.categoryType === "all"} onClick={() => updateNav({ categoryType: "all", category: "All" })} theme={theme} isDark={isDark} />
-                 <SidebarItem icon={<Pin size={16} strokeWidth={1.5}/>} label="Pinned" active={nav.categoryType === "pinned"} onClick={() => updateNav({ categoryType: "pinned", category: "All" })} theme={theme} isDark={isDark} />
-                 <div className="my-1 mx-3 border-t border-black/5 dark:border-white/5"></div>
-                 <SidebarItem icon={<Trash2 size={16} strokeWidth={1.5}/>} label="Trash" active={nav.categoryType === "trash"} onClick={() => updateNav({ categoryType: "trash", category: "All" })} theme={theme} isDark={isDark} />
+                 <SidebarItem 
+                     icon={<Compass size={16} strokeWidth={1.5}/>} 
+                     label="Everything" 
+                     active={nav.categoryType === "all"} 
+                     onClick={() => updateNav({ categoryType: "all", category: "All" })} 
+                     theme={theme} 
+                     isDark={isDark} 
+                     onDropFiles={(files: File[]) => processAndUploadFiles(files, "Inbox")} 
+                 />
+                 <SidebarItem 
+                     icon={<Pin size={16} strokeWidth={1.5}/>} 
+                     label="Pinned" 
+                     active={nav.categoryType === "pinned"} 
+                     onClick={() => updateNav({ categoryType: "pinned", category: "All" })} 
+                     theme={theme} 
+                     isDark={isDark} 
+                     onDropItem={(id: string) => bulkPinItems([id])}
+                     onDropItems={(ids: string[]) => { bulkPinItems(ids); setSelectedItems(new Set()); }}
+                     onDropFiles={(files: File[]) => processAndUploadFiles(files, "Inbox")}
+                 />
                </div>
             </div>
 
             <div>
                <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} px-3 mb-2 opacity-70`}>Content</h4>
                <div className="space-y-0.5">
-                 <SidebarItem icon={<FileText size={16} strokeWidth={1.5}/>} label="Notes" active={nav.categoryType === "type" && nav.category === "notes"} onClick={() => updateNav({ categoryType: "type", category: "notes" })} theme={theme} isDark={isDark} />
-                 <SidebarItem icon={<Globe size={16} strokeWidth={1.5}/>} label="Links &amp; Docs" active={nav.categoryType === "type" && nav.category === "links"} onClick={() => updateNav({ categoryType: "type", category: "links" })} theme={theme} isDark={isDark} />
-                 <SidebarItem icon={<ImageIcon size={16} strokeWidth={1.5}/>} label="Media" active={nav.categoryType === "type" && nav.category === "media"} onClick={() => updateNav({ categoryType: "type", category: "media" })} theme={theme} isDark={isDark} />
-                 <SidebarItem icon={<Hash size={16} strokeWidth={1.5}/>} label="Hashtags" active={(nav.categoryType as any) === "hashtags" || nav.categoryType === "tag"} onClick={() => updateNav({ categoryType: "hashtags" as any, category: "All" })} theme={theme} isDark={isDark} />
-               </div>
-            </div>
-
-            <div>
-               <div className="flex items-center justify-between px-3 mb-2 group">
-                 <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} opacity-70`}>My Lists</h4>
-                 {canModifyStructure && (
-                     <button aria-label="Create List" onClick={() => updateSidebar({ isCreatingList: true })} className={`opacity-0 group-hover:opacity-100 transition-opacity ${theme.textMuted} hover:${theme.text}`}>
-                         <Plus size={14} strokeWidth={1.5}/>
-                     </button>
-                 )}
-               </div>
-               <div className="space-y-0.5">
-                  {sidebar.isCreatingList && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
-                      <ListIcon size={14} strokeWidth={1.5} className="text-teal-500" />
-                      <input 
-                          autoFocus 
-                          type="text" 
-                          value={sidebar.newListName} 
-                          onChange={e => updateSidebar({ newListName: e.target.value })} 
-                          onKeyDown={e => { 
-                              if (e.key === "Enter") { setCustomLists(p => [...p, sidebar.newListName]); updateSidebar({ isCreatingList: false, newListName: "" }); } 
-                              if (e.key === "Escape") updateSidebar({ isCreatingList: false }); 
-                          }} 
-                          onBlur={() => { 
-                              if (sidebar.newListName) setCustomLists(p => [...p, sidebar.newListName]); 
-                              updateSidebar({ isCreatingList: false, newListName: "" }); 
-                          }} 
-                          className={`bg-transparent border-none outline-none text-sm font-bold w-full ${theme.text}`} 
-                          placeholder="List name..." 
-                      />
-                    </motion.div>
-                  )}
-                  {listOrder.map((list, index) => (
-                     <SidebarEditableItem 
-                         key={list} 
-                         icon={<ListIcon size={16} strokeWidth={1.5}/>} 
-                         label={list} 
-                         active={nav.categoryType === "list" && nav.category === list} 
-                         theme={theme} 
-                         isDark={isDark} 
-                         canModify={canModifyStructure} 
-                         onClick={() => updateNav({ categoryType: "list", category: list })} 
-                         onRename={(oldN: string, newN: string) => handleRenameList(oldN, newN)} 
-                         onDelete={() => handleDeleteList(list)} 
-                         onMoveUp={() => setListOrder(prev => moveArrayItem(prev, index, -1))} 
-                         onMoveDown={() => setListOrder(prev => moveArrayItem(prev, index, 1))} 
-                         onDropItem={(itemId: string | number) => moveItemToList(itemId, list)} 
-                         onDropItems={(itemIds: (string | number)[]) => { bulkMoveToList(itemIds, list); setSelectedItems(new Set()); }}
-                     />
-                  ))}
+                 <SidebarItem 
+                     icon={<FileText size={16} strokeWidth={1.5}/>} 
+                     label="Notes" 
+                     active={nav.categoryType === "type" && nav.category === "notes"} 
+                     onClick={() => updateNav({ categoryType: "type", category: "notes" })} 
+                     theme={theme} 
+                     isDark={isDark} 
+                     onDropItem={(id: string) => bulkChangeType([id], 'note')}
+                     onDropItems={(ids: string[]) => { bulkChangeType(ids, 'note'); setSelectedItems(new Set()); }}
+                     onDropFiles={(files: File[]) => processAndUploadFiles(files, "Inbox")}
+                 />
+                 <SidebarItem 
+                     icon={<Globe size={16} strokeWidth={1.5}/>} 
+                     label="Links &amp; Docs" 
+                     active={nav.categoryType === "type" && nav.category === "links"} 
+                     onClick={() => updateNav({ categoryType: "type", category: "links" })} 
+                     theme={theme} 
+                     isDark={isDark} 
+                     onDropItem={(id: string) => bulkChangeType([id], 'link')}
+                     onDropItems={(ids: string[]) => { bulkChangeType(ids, 'link'); setSelectedItems(new Set()); }}
+                     onDropFiles={(files: File[]) => processAndUploadFiles(files, "Inbox")}
+                 />
+                 <SidebarItem 
+                     icon={<ImageIcon size={16} strokeWidth={1.5}/>} 
+                     label="Media" 
+                     active={nav.categoryType === "type" && nav.category === "media"} 
+                     onClick={() => updateNav({ categoryType: "type", category: "media" })} 
+                     theme={theme} 
+                     isDark={isDark} 
+                     onDropItem={(id: string) => bulkChangeType([id], 'image')}
+                     onDropItems={(ids: string[]) => { bulkChangeType(ids, 'image'); setSelectedItems(new Set()); }}
+                     onDropFiles={(files: File[]) => processAndUploadFiles(files, "Inbox")}
+                 />
+                 <SidebarItem 
+                     icon={<Hash size={16} strokeWidth={1.5}/>} 
+                     label="Hashtags" 
+                     active={(nav.categoryType as any) === "hashtags" || nav.categoryType === "tag"} 
+                     onClick={() => updateNav({ categoryType: "hashtags" as any, category: "All" })} 
+                     theme={theme} 
+                     isDark={isDark} 
+                 />
                </div>
             </div>
 
@@ -1450,10 +1450,75 @@ export default function BrainboardBalanced() {
                   ))}
                </div>
             </div>
+
+            <div>
+               <div className="flex items-center justify-between px-3 mb-2 group">
+                 <h4 className={`text-[10px] font-bold uppercase tracking-widest ${theme.textMuted} opacity-70`}>My Lists</h4>
+                 {canModifyStructure && (
+                     <button aria-label="Create List" onClick={() => updateSidebar({ isCreatingList: true })} className={`opacity-0 group-hover:opacity-100 transition-opacity ${theme.textMuted} hover:${theme.text}`}>
+                         <Plus size={14} strokeWidth={1.5}/>
+                     </button>
+                 )}
+               </div>
+               <div className="space-y-0.5">
+                  {sidebar.isCreatingList && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className={`flex items-center gap-3 px-3 py-2 rounded-2xl border ${theme.card}`}>
+                      <ListIcon size={14} strokeWidth={1.5} className="text-teal-500" />
+                      <input 
+                          autoFocus 
+                          type="text" 
+                          value={sidebar.newListName} 
+                          onChange={e => updateSidebar({ newListName: e.target.value })} 
+                          onKeyDown={e => { 
+                              if (e.key === "Enter") { setCustomLists(p => [...p, sidebar.newListName]); updateSidebar({ isCreatingList: false, newListName: "" }); } 
+                              if (e.key === "Escape") updateSidebar({ isCreatingList: false }); 
+                          }} 
+                          onBlur={() => { 
+                              if (sidebar.newListName) setCustomLists(p => [...p, sidebar.newListName]); 
+                              updateSidebar({ isCreatingList: false, newListName: "" }); 
+                          }} 
+                          className={`bg-transparent border-none outline-none text-sm font-bold w-full ${theme.text}`} 
+                          placeholder="List name..." 
+                      />
+                    </motion.div>
+                  )}
+                  {listOrder.map((list, index) => (
+                     <SidebarEditableItem 
+                         key={list} 
+                         icon={<ListIcon size={16} strokeWidth={1.5}/>} 
+                         label={list} 
+                         active={nav.categoryType === "list" && nav.category === list} 
+                         theme={theme} 
+                         isDark={isDark} 
+                         canModify={canModifyStructure} 
+                         onClick={() => updateNav({ categoryType: "list", category: list })} 
+                         onRename={(oldN: string, newN: string) => handleRenameList(oldN, newN)} 
+                         onDelete={() => handleDeleteList(list)} 
+                         onMoveUp={() => setListOrder(prev => moveArrayItem(prev, index, -1))} 
+                         onMoveDown={() => setListOrder(prev => moveArrayItem(prev, index, 1))} 
+                         onDropItem={(itemId: string | number) => moveItemToList(itemId, list)} 
+                         onDropItems={(itemIds: (string | number)[]) => { bulkMoveToList(itemIds, list); setSelectedItems(new Set()); }}
+                     />
+                  ))}
+               </div>
+            </div>
+
+            <div className="mt-auto pt-4 pb-2">
+               <div className={`w-full h-px mb-4 ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
+               <SidebarItem 
+                   icon={<Trash2 size={16} strokeWidth={1.5}/>} 
+                   label="Trash" 
+                   active={nav.categoryType === "trash"} 
+                   onClick={() => updateNav({ categoryType: "trash", category: "All" })} 
+                   theme={theme} 
+                   isDark={isDark} 
+                   onDropItem={(id: string) => bulkMoveToTrash([id])}
+                   onDropItems={(ids: string[]) => { bulkMoveToTrash(ids); setSelectedItems(new Set()); }}
+               />
+            </div>
          </div>
 
-         {/* Updated Profile Section matching the design request */}
-         <div className="p-4 mt-auto border-t border-white/5">
+         <div className="p-4 border-t border-white/5">
            <button onClick={() => updateUi({ isAccountOpen: true })} className={`flex items-center gap-3 w-full text-left px-3 py-3 rounded-2xl transition-all cursor-pointer active:scale-95 ${isDark ? "hover:bg-white/5" : "hover:bg-black/5"}`}>
              <img src={currentAvatar} className={`w-7 h-7 rounded-full object-cover shadow-sm ring-1 ${isDark ? "ring-white/20" : "ring-black/10"}`} alt="Avatar" />
              <div className="flex-1 min-w-0">
@@ -1472,7 +1537,6 @@ export default function BrainboardBalanced() {
         onDrop={handleDrop}
         tabIndex={0} 
       >
-        {/* Only render lasso tool if user has dragged at least a few pixels to prevent phantom "green line" dots on accidental clicks */}
         {lasso.active && (Math.abs(lasso.currentX - lasso.startX) > 2 || Math.abs(lasso.currentY - lasso.startY) > 2) && (
           <div
             className="fixed border border-teal-500/50 bg-teal-500/10 transition-none pointer-events-none rounded-lg backdrop-blur-sm"
@@ -1487,7 +1551,6 @@ export default function BrainboardBalanced() {
           />
         )}
 
-        {/* SLEEK PROFESSIONAL FLOATING SELECTION MENU */}
         <AnimatePresence>
            {isSelectMode && (
               <motion.div 
@@ -1735,7 +1798,7 @@ export default function BrainboardBalanced() {
                )}
             </AnimatePresence>
             
-            {/* Trash Button - Re-added confirmation popup support */}
+            {/* Trash Button */}
             {nav.categoryType === "trash" ? (
               <button key="btn-trash" aria-label="Empty Trash" onClick={() => setShowTrashConfirm(true)} className={`px-6 py-3 text-sm font-bold transition-all active:scale-95 flex items-center gap-2 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white rounded-xl`}>
                 <Trash2 size={16} strokeWidth={2} /> <span className="hidden md:inline">Empty Trash</span>
@@ -1831,7 +1894,6 @@ export default function BrainboardBalanced() {
            </AnimatePresence>
         </div>
 
-        {/* SMOOTH VIEW SWITCHING: Cross-fading the entire layout wrapper */}
         <div 
            className="flex-1 overflow-y-auto px-6 md:px-12 pt-6 pb-24 md:pb-20 custom-scrollbar relative z-10 w-full cursor-crosshair"
            onPointerDown={handlePointerDown}

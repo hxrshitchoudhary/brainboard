@@ -63,13 +63,14 @@ export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, on
    const handleDragLeave = (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      setIsDragOver(false);
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+         setIsDragOver(false);
+      }
    };
 
    const handleDragOver = (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      e.dataTransfer.dropEffect = 'copy';
    };
 
    const handleDrop = (e: React.DragEvent) => {
@@ -77,27 +78,31 @@ export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, on
       e.stopPropagation();
       setIsDragOver(false);
       
-      // 1. Handle Multi-Item Drop (Dragging multiple selected cards)
-      const multiData = e.dataTransfer.getData('application/x-brainboard-items');
-      if (multiData && onDropItems) {
-         try {
-            const parsedIds = JSON.parse(multiData);
-            onDropItems(parsedIds);
-            return;
-         } catch (err) {}
+      let parsed = null;
+      
+      // 1. Check highly reliable global fallback
+      if (typeof window !== 'undefined' && (window as any).__bb_drag) {
+          parsed = (window as any).__bb_drag;
+      } else {
+          // 2. Check standard event data
+          const internalData = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+          if (internalData) {
+             try { parsed = JSON.parse(internalData); } catch (err) {}
+          }
       }
 
-      // 2. Handle Single Item Drop
-      const singleData = e.dataTransfer.getData('application/x-brainboard-item');
-      if (singleData && onDropItem) {
-         try {
-             const parsed = JSON.parse(singleData);
-             onDropItem(parsed.id);
-             return;
-         } catch (err) {}
+      if (parsed) {
+         if (parsed.type === 'multi' && onDropItems) {
+            onDropItems(parsed.payload);
+         } else if (parsed.type === 'single' && onDropItem) {
+            onDropItem(parsed.payload);
+         }
+         
+         if (typeof window !== 'undefined') (window as any).__bb_drag = null;
+         return; // Early exit so we don't accidentally treat the drag as a file drop
       }
 
-      // 3. Handle External Files dropped directly onto this folder from Desktop
+      // Handle External Files dropped directly onto this folder from Desktop
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0 && onDropFiles) {
           onDropFiles(Array.from(e.dataTransfer.files));
       }
@@ -130,14 +135,14 @@ export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, on
                    onClick={onClick} 
                    className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-bold transition-all border border-transparent ${
                       isDragOver 
-                         ? 'bg-teal-500/20 text-teal-500 border-teal-500/50 shadow-inner scale-[1.02]' // Glowing drop zone
+                         ? 'bg-teal-500/20 text-teal-500 border-teal-500/50 shadow-inner scale-[1.02]' 
                          : active 
                             ? (isDark ? 'bg-white/10 text-white shadow-inner' : 'bg-black/5 text-black shadow-inner') 
                             : `${theme.textMuted} ${theme.btnGhost}`
                    }`}
                >
-                   <span className={active || isDragOver ? 'text-teal-500' : ''}>{icon}</span>
-                   <span className="truncate">{label}</span>
+                   <span className={`pointer-events-none ${active || isDragOver ? 'text-teal-500' : ''}`}>{icon}</span>
+                   <span className="truncate pointer-events-none">{label}</span>
                </button>
                
                {canModify && (

@@ -77,36 +77,100 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
   const handleStickyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { setStickyText(e.target.value); };
   const handleStickyBlur = () => { setIsEditingSticky(false); if (stickyText !== item.ai_summary && onUpdateSticky) { onUpdateSticky(item.id, stickyText); } };
   
-  // --- BULLETPROOF DRAG HANDLER ---
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => { 
-      e.dataTransfer.effectAllowed = 'move'; 
+      e.dataTransfer.effectAllowed = 'all'; // <--- FIX: Prevents Safari/Chrome drop rejection
       
       let dragPayload;
+      const isMulti = isSelected && selectedItems && selectedItems.length > 1;
 
-      // Dragging multiple items
-      if (isSelected && selectedItems && selectedItems.length > 1) {
+      if (isMulti) {
           dragPayload = { type: 'multi', payload: selectedItems };
-          
-          // Create native visual badge ("Moving X items")
-          const badge = document.createElement('div');
-          badge.id = 'drag-badge';
-          badge.innerHTML = `<div style="background:#14b8a6;color:white;padding:6px 14px;border-radius:12px;font-family:sans-serif;font-size:12px;font-weight:bold;box-shadow:0 10px 25px rgba(0,0,0,0.5);">Moving ${selectedItems.length} items</div>`;
-          badge.style.position = 'absolute';
-          badge.style.top = '-1000px';
-          document.body.appendChild(badge);
-          e.dataTransfer.setDragImage(badge, -10, -10);
-          setTimeout(() => {
-              const el = document.getElementById('drag-badge');
-              if (el) el.remove();
-          }, 100);
-      } 
-      // Dragging a single item (Card/Reel/Note)
-      else {
+      } else {
           dragPayload = { type: 'single', payload: item.id };
       }
+
+      // SET GLOBAL STORE FOR BULLETPROOF DRAG
+      if (typeof window !== 'undefined') {
+          (window as any).__bb_drag = dragPayload;
+      }
+
+      // CREATE iOS-LIKE MINIMIZED DRAG BADGE
+      const badge = document.createElement('div');
+      badge.id = 'ios-drag-badge';
+      badge.style.position = 'absolute';
+      badge.style.top = '-1000px';
+      badge.style.left = '-1000px';
+      badge.style.pointerEvents = 'none';
+      badge.style.zIndex = '999999';
+
+      const titleText = item.title || "Untitled Item";
+      const displayText = isMulti ? `Moving ${selectedItems.length} items` : titleText;
       
-      // Use 'text/plain' to ensure maximum browser compatibility
+      badge.innerHTML = `
+          <div style="position: relative;">
+              <div style="
+                  background: ${isDark ? 'rgba(30, 30, 35, 0.85)' : 'rgba(255, 255, 255, 0.9)'};
+                  backdrop-filter: blur(12px);
+                  -webkit-backdrop-filter: blur(12px);
+                  border: 1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'};
+                  color: ${isDark ? '#fff' : '#000'};
+                  padding: 10px 16px;
+                  border-radius: 14px;
+                  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+                  font-size: 13px;
+                  font-weight: 600;
+                  box-shadow: 0 12px 30px rgba(0,0,0,0.2), 0 4px 10px rgba(0,0,0,0.1);
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+                  transform: rotate(-3deg) scale(0.95);
+                  white-space: nowrap;
+                  max-width: 220px;
+                  z-index: 2;
+                  position: relative;
+              ">
+                  ${isMulti ? `
+                  <div style="
+                      background: #14b8a6; color: white;
+                      width: 22px; height: 22px; border-radius: 8px;
+                      display: flex; align-items: center; justify-content: center;
+                      font-size: 11px; font-weight: bold; flex-shrink: 0;
+                  ">${selectedItems.length}</div>
+                  ` : `
+                  <div style="
+                      background: rgba(20, 184, 166, 0.15); color: #14b8a6;
+                      width: 22px; height: 22px; border-radius: 8px;
+                      display: flex; align-items: center; justify-content: center;
+                      flex-shrink: 0;
+                  ">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                  </div>
+                  `}
+                  <span style="overflow: hidden; text-overflow: ellipsis;">${displayText}</span>
+              </div>
+              ${isMulti ? `
+              <div style="
+                  position: absolute; top: 4px; left: 4px; right: -4px; bottom: -4px;
+                  background: ${isDark ? 'rgba(40, 40, 45, 0.6)' : 'rgba(240, 240, 240, 0.8)'};
+                  border: 1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'};
+                  border-radius: 14px; z-index: 1; transform: rotate(1deg);
+              "></div>
+              ` : ''}
+          </div>
+      `;
+
+      document.body.appendChild(badge);
+      
+      e.dataTransfer.setDragImage(badge, 25, 25);
+      
+      // Dual-transfer payload
+      e.dataTransfer.setData('application/json', JSON.stringify(dragPayload));
       e.dataTransfer.setData('text/plain', JSON.stringify(dragPayload));
+
+      setTimeout(() => {
+          const el = document.getElementById('ios-drag-badge');
+          if (el) el.remove();
+      }, 100);
   };
 
   const reactionsObj = useMemo(() => { try { return JSON.parse(item?.likes || '{}'); } catch { return {}; } }, [item?.likes]);
@@ -164,8 +228,9 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                  else { onClick(e); }
              }
           }}
-          // Fix: Type override for Framer Motion native HTML5 drag event override
-          draggable={!inTrash} onDragStart={handleDragStart as any} 
+          draggable={!inTrash} 
+          onDragStart={handleDragStart as any} 
+          onDragEnd={() => { if (typeof window !== 'undefined') (window as any).__bb_drag = null; }}
           className={`group/list relative rounded-2xl transition-all duration-200 flex flex-row items-center w-full border ${theme.card} ${theme.cardHover} p-3 gap-4 h-18 ${isSelected ? 'ring-2 ring-teal-500 bg-teal-500/5' : ''} ${isActiveKeyboard ? 'ring-2 ring-teal-500/80 shadow-[0_0_20px_rgba(20,184,166,0.2)]' : ''} lasso-selectable cursor-pointer font-sans`}
           data-id={item.id}
        >
@@ -194,7 +259,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
           {inTrash ? (
              <div className="flex items-center gap-2 opacity-0 group-hover/list:opacity-100 transition-opacity pr-2 shrink-0">
                 <button onClick={(e) => { e.stopPropagation(); onRestore(item.id); }} className="p-2.5 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors shadow-sm"><RotateCcw size={14}/></button>
-                <button onClick={(e) => { e.stopPropagation(); onHardDelete(item.id); }} className="p-2.5 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors shadow-sm"><Trash2 size={14}/></button>
+                <button onClick={(e) => { e.stopPropagation(); onHardDelete(item.id); }} className="p-2.5 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-50 hover:text-white transition-colors shadow-sm"><Trash2 size={14}/></button>
              </div>
           ) : (
              <div className="flex items-center gap-2 opacity-0 group-hover/list:opacity-100 transition-opacity shrink-0">
@@ -294,8 +359,9 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
              else { onClick(e); }
          }
       }} 
-      // Fix: Type override for Framer Motion native HTML5 drag event override
-      draggable={!inTrash} onDragStart={handleDragStart as any}
+      draggable={!inTrash} 
+      onDragStart={handleDragStart as any}
+      onDragEnd={() => { if (typeof window !== 'undefined') (window as any).__bb_drag = null; }}
       className={`group/card relative rounded-3xl transition-all duration-200 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isActiveKeyboard ? 'ring-4 ring-teal-500/80 shadow-[0_0_40px_rgba(20,184,166,0.4)] scale-[1.02]' : ''} ${!inTrash ? 'active:cursor-grabbing hover:cursor-grab' : ''} lasso-selectable`}
       style={{ zIndex: isCardMenuOpen || isTagMenuOpen ? 50 : 10 }}
       data-id={item.id}
