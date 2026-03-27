@@ -29,7 +29,10 @@
 
 /* --- UI PERFORMANCE OPTIMIZATIONS --- */
 .card-optimize {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 300px; /* Approximates card height to prevent scrollbar jumping */
+  /* Removed content-visibility because it causes aggressive clipping (contain: paint) */
+  /* content-visibility: auto;  <-- CAUSES CLIPPING */
+  /* contain-intrinsic-size: 0 300px; */
+  
   will-change: transform, opacity;
+  transform: translateZ(0); /* Hardware acceleration without clipping */
 }
