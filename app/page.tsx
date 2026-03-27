@@ -110,7 +110,7 @@ export default function BrainboardBalanced() {
     isLoading, page, setPage, hasMore, fetchItems, saveNote, insertItem, updateItemTags, moveItemToFolder, moveItemToList, updateStickyNote, toggleItemReaction, toggleChecklistItem,
     moveToTrash, restoreFromTrash, hardDelete, emptyTrash, renameFolder, deleteFolder, renameList, deleteList,
     bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete,
-    bulkPinItems, bulkChangeType
+    bulkPinItems, bulkChangeType, recentIds, setRecentIds
   } = useBrainboardData(session, teamWorkspaceId, nav.workspace, profile.displayName, showToast, updateUi);
 
   const {
@@ -178,6 +178,16 @@ export default function BrainboardBalanced() {
     }
     
     return result.sort((a, b) => {
+      const aRecentIdx = recentIds.indexOf(a.id);
+      const bRecentIdx = recentIds.indexOf(b.id);
+      
+      const aIsRecent = aRecentIdx !== -1;
+      const bIsRecent = bRecentIdx !== -1;
+
+      if (aIsRecent && !bIsRecent) return -1;
+      if (!aIsRecent && bIsRecent) return 1;
+      if (aIsRecent && bIsRecent) return aRecentIdx - bRecentIdx;
+
       if (a.is_pinned && !b.is_pinned) return -1;
       if (!a.is_pinned && b.is_pinned) return 1;
       
@@ -189,7 +199,7 @@ export default function BrainboardBalanced() {
       
       return validB - validA;
     });
-  }, [debouncedSearchQuery, nav.category, nav.categoryType, items, nav.workspace]);
+  }, [debouncedSearchQuery, nav.category, nav.categoryType, items, nav.workspace, recentIds]);
 
   const smartTags = useMemo(() => {
     const tags = new Set<string>();
@@ -915,6 +925,7 @@ export default function BrainboardBalanced() {
              created_at: localCreationTime 
          };
 
+         setRecentIds(prev => [tempId, ...prev]);
          setItems(prev => [newItem, ...prev]);
 
          if (isReel && !folders.includes("Instagram")) {
@@ -977,9 +988,11 @@ export default function BrainboardBalanced() {
              if (dbData) {
                  // 2. Transfer the `clientKey` to the Database object so the React Key NEVER changes on screen
                  setItems(prev => prev.map(i => i.id === tempId ? { ...dbData, clientKey: tempId } : i));
+                 setRecentIds(prev => prev.map(id => id === tempId ? dbData.id : id));
                  showToast(isReel ? "Reel captured!" : isYouTube ? "YouTube saved!" : "Link saved!");
              } else {
                  setItems(prev => prev.filter(i => i.id !== tempId));
+                 setRecentIds(prev => prev.filter(id => id !== tempId));
                  showToast("Failed to save item.", true);
              }
          } catch (err) {
@@ -998,8 +1011,10 @@ export default function BrainboardBalanced() {
              if (dbData) {
                  // Transfer `clientKey` on fallback as well
                  setItems(prev => prev.map(i => i.id === tempId ? { ...dbData, clientKey: tempId } : i));
+                 setRecentIds(prev => prev.map(id => id === tempId ? dbData.id : id));
              } else {
                  setItems(prev => prev.filter(i => i.id !== tempId));
+                 setRecentIds(prev => prev.filter(id => id !== tempId));
              }
          } finally { 
              updateUi({ isAILoading: false }); 
@@ -1008,7 +1023,7 @@ export default function BrainboardBalanced() {
     };
     window.addEventListener("paste", handleGlobalPaste);
     return () => window.removeEventListener("paste", handleGlobalPaste);
-  }, [session, teamWorkspaceId, updateUi, setItems, setCustomFolders, showToast]);
+  }, [session, teamWorkspaceId, updateUi, setItems, setRecentIds, setCustomFolders, showToast]);
 
   const monthStart = startOfMonth(nav.currentDate);
   const monthEnd = endOfMonth(monthStart);
@@ -1923,7 +1938,7 @@ export default function BrainboardBalanced() {
                      {getCategoryTitle()}
                    </h2>
                    <p className={`mt-2 text-xs font-bold flex items-center gap-2 uppercase tracking-widest opacity-80 ${theme.textMuted}`}>
-                      {filteredData.length} items curated
+                      {filteredData.length} {filteredData.length === 1 ? 'item' : 'items'} curated
                    </p>
                  </div>
                 </>

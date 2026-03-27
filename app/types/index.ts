@@ -12,6 +12,7 @@ export interface ItemComment {
 
 export interface BentoItem {
   id: string | number;
+  clientKey?: string | number; // Safely added to fix the UI jump locally
   user_id?: string;
   workspace_id?: string | null;
   type?: string; 
@@ -38,7 +39,7 @@ export interface BentoItem {
   scheduled_for?: string | null;
   updated_at?: string;
   created_at?: string;
-  client_timestamp?: number; // Safely added to prevent TypeScript errors
+  client_timestamp?: number; 
 }
 
 export interface NotificationItem {

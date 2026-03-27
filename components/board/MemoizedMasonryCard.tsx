@@ -380,9 +380,9 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
       <div className="absolute inset-0 rounded-3xl pointer-events-none border border-white/5 mix-blend-overlay" style={{ zIndex: 10 }}></div>
       <div ref={spotlightRef} className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-200 group-hover/card:opacity-100" style={{ zIndex: 5 }} />
 
-      {/* FIXED ACTION BUTTONS: Safe top-right, absolutely protected from overlap */}
+      {/* FIXED ACTION BUTTONS: Now stacked vertically on the right to prevent overlap with the sticky note */}
       {canModify && (
-         <div className={`absolute top-4 right-4 flex flex-nowrap items-center justify-end gap-2 pointer-events-auto transition-all duration-300 z-50`} ref={controlsRef}>
+         <div className={`absolute top-4 right-4 flex flex-col items-center justify-start gap-2 pointer-events-auto transition-all duration-300 z-50`} ref={controlsRef}>
             <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleSelect(item.id, e.shiftKey); }} className={`p-2 rounded-full transition-all border shadow-md backdrop-blur-xl active:scale-95 shrink-0 ${isSelected ? 'opacity-100 bg-teal-500 border-teal-500 text-white' : `opacity-0 group-hover/card:opacity-100 ${isDark ? 'bg-black/50 border-white/10 text-white hover:bg-black' : 'bg-white/90 border-black/5 text-zinc-800 hover:bg-white'}` }`}>
                <Check size={14} strokeWidth={isSelected ? 3 : 2.5} />
             </button>
