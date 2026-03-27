@@ -1,3 +1,4 @@
+/* filepath: app/globals.css */
 @import "tailwindcss";
 
 @theme {
@@ -24,4 +25,11 @@
 }
 ::view-transition-group(root) {
   z-index: 99999;
+}
+
+/* --- UI PERFORMANCE OPTIMIZATIONS --- */
+.card-optimize {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 300px; /* Approximates card height to prevent scrollbar jumping */
+  will-change: transform, opacity;
 }

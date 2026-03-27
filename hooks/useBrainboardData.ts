@@ -1,3 +1,4 @@
+// filepath: hooks/useBrainboardData.ts
 import { useState, useCallback } from "react";
 import { supabase } from '@/lib/supabase'; 
 import { BentoItem } from "@/app/types";
@@ -29,7 +30,7 @@ export function useBrainboardData(
     updateUi({ isSyncing: true });
     
     try {
-      const PAGE_SIZE = 50;
+      const PAGE_SIZE = 10000; // Load all at once
       const from = (pageNum - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 

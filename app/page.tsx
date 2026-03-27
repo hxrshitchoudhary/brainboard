@@ -1,3 +1,4 @@
+// filepath: app/page.tsx
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef, startTransition } from "react";
@@ -6,7 +7,7 @@ import { Inter } from 'next/font/google';
 import { Toaster, toast as sonnerToast } from 'sonner';
 import { Command } from 'cmdk';
 import { supabase } from '@/lib/supabase'; 
-import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow } from 'date-fns';
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow, isToday, isYesterday, isThisWeek } from 'date-fns';
 
 // --- ICONS ---
 import { 
@@ -200,6 +201,38 @@ export default function BrainboardBalanced() {
       return validB - validA;
     });
   }, [debouncedSearchQuery, nav.category, nav.categoryType, items, nav.workspace, recentIds]);
+
+  const groupedData = useMemo(() => {
+    if (nav.viewMode === 'grid' || nav.viewMode === 'calendar' || isSelectMode || debouncedSearchQuery) {
+        return { "All Items": filteredData };
+    }
+    const groups: Record<string, BentoItem[]> = {
+        "Today": [],
+        "Yesterday": [],
+        "This Week": [],
+        "Older": []
+    };
+    filteredData.forEach(item => {
+        const date = item.created_at ? new Date(item.created_at) : new Date();
+        if (isToday(date)) groups["Today"].push(item);
+        else if (isYesterday(date)) groups["Yesterday"].push(item);
+        else if (isThisWeek(date)) groups["This Week"].push(item);
+        else groups["Older"].push(item);
+    });
+    
+    return Object.fromEntries(Object.entries(groups).filter(([_, items]) => items.length > 0));
+  }, [filteredData, nav.viewMode, isSelectMode, debouncedSearchQuery]);
+
+  const getEmptyState = () => {
+    if (debouncedSearchQuery) return { icon: Search, title: "No results found.", desc: `No matches for "${debouncedSearchQuery}".` };
+    if (nav.categoryType === "trash") return { icon: Trash2, title: "Trash is empty.", desc: "Nothing here." };
+    if (nav.categoryType === "pinned") return { icon: Pin, title: "No pinned items.", desc: "Pin your favorites for quick access." };
+    if (nav.categoryType === "tag") return { icon: Hash, title: `No items for #${nav.category}`, desc: "Drop something here to auto-tag it." };
+    if (nav.categoryType === "list") return { icon: ListIcon, title: "List is empty.", desc: "Move items to this list." };
+    return { icon: LayoutGrid, title: "A pristine canvas.", desc: "Drop a file anywhere, or press \"Ctrl+V\"." };
+  };
+  const emptyState = getEmptyState();
+  const EmptyIcon = emptyState.icon;
 
   const smartTags = useMemo(() => {
     const tags = new Set<string>();
@@ -1226,7 +1259,6 @@ export default function BrainboardBalanced() {
          )}
       </AnimatePresence>
 
-      {/* NEW Empty Trash Confirmation Modal */}
       <AnimatePresence>
          {showTrashConfirm && (
             <div className="fixed inset-0 z-99999 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowTrashConfirm(false)}>
@@ -1723,7 +1755,8 @@ export default function BrainboardBalanced() {
           )}
         </AnimatePresence>
 
-        <header className="w-full px-6 md:px-12 pt-8 pb-4 shrink-0 flex items-center justify-between gap-6 relative z-40 bg-transparent">
+        {/* 🌟 UPGRADE: Dynamic Frost Sticky Header */}
+        <header className={`sticky top-0 w-full px-6 md:px-12 pt-6 pb-4 shrink-0 flex items-center justify-between gap-6 z-50 transition-all duration-300 ${isDark ? 'bg-[#0E0E10]/80 border-b border-white/5 backdrop-blur-2xl' : 'bg-white/80 border-b border-black/5 backdrop-blur-2xl'}`}>
           <div className="flex-1 max-w-2xl flex items-center gap-4">
             
             <div className="relative group flex-1">
@@ -1993,86 +2026,105 @@ export default function BrainboardBalanced() {
            onPointerDown={handlePointerDown}
         >
            <div className="relative z-10 cursor-auto min-h-full">
+               
+               {/* 🌟 UPGRADE: Masonry Skeleton Loaders */}
                {isLoading && page === 1 ? (
-                  <div className={nav.viewMode === "grid" ? "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start pointer-events-none" : nav.viewMode === "list" ? "flex flex-col gap-3 pointer-events-none" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pointer-events-none"}>
-                     {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                        <div key={i} className={`border relative overflow-hidden ${theme.card} ${nav.viewMode === 'list' ? 'h-18' : 'h-64 md:h-85'} break-inside-avoid w-full mb-6 rounded-3xl`}>
-                           <div className={`absolute inset-0 -translate-x-full bg-linear-to-r from-transparent ${isDark ? "via-white/5" : "via-black/5"} to-transparent animate-shimmer`} />
-                        </div>
+                  <div className={nav.viewMode === "list" ? "flex flex-col gap-4 w-full pointer-events-none" : "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start w-full pointer-events-none"}>
+                     {[150, 250, 300, 200, 280, 180, 320, 220, 260, 190, 310, 170, 290, 210, 240].slice(0, nav.viewMode === 'list' ? 8 : 15).map((height, i) => (
+                        <motion.div 
+                           key={i}
+                           initial={{ opacity: 0, y: 10 }}
+                           animate={{ opacity: 1, y: 0 }}
+                           transition={{ delay: i * 0.02 }}
+                           className={`w-full rounded-3xl relative overflow-hidden border ${isDark ? 'bg-white/5 border-white/5' : 'bg-black/5 border-black/5'}`}
+                           style={{ height: nav.viewMode === 'list' ? '72px' : `${height}px` }}
+                        >
+                           <div className={`absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-linear-to-r from-transparent ${isDark ? "via-white/10" : "via-black/5"} to-transparent`} />
+                        </motion.div>
                      ))}
                   </div>
+
                ) : filteredData.length === 0 && nav.viewMode !== "calendar" ? (
+                  
                   <div className="flex-1 w-full flex flex-col items-center mt-20 text-center opacity-50 px-4 pointer-events-none">
+                     {/* 🌟 UPGRADE: Contextual Empty States */}
                      <div className={`w-full max-w-lg border border-dashed p-16 flex flex-col items-center justify-center transition-colors shadow-sm rounded-3xl ${isDark ? "border-white/20 bg-white/5" : "border-black/20 bg-black/5"}`}>
-                       <LayoutGrid size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
-                       <h3 className="text-3xl font-black tracking-tight mb-2">A pristine canvas.</h3>
-                       <p className={`text-base font-medium ${theme.textMuted}`}>Drop a file anywhere, or press &quot;Ctrl+V&quot;.</p>
+                       <EmptyIcon size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
+                       <h3 className="text-3xl font-black tracking-tight mb-2">{emptyState.title}</h3>
+                       <p className={`text-base font-medium ${theme.textMuted}`}>{emptyState.desc}</p>
                      </div>
                   </div>
                   
                ) : nav.viewMode !== "calendar" ? (
-                  <AnimatePresence mode="popLayout">
+                  <AnimatePresence mode="wait">
                     <motion.div 
                         key={nav.viewMode}
-                        initial={{ opacity: 0, y: 15 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -15 }}
-                        transition={{ duration: 0.2, ease: "easeInOut" }}
+                        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                        transition={{ duration: 0.25, ease: "easeOut" }}
                         className={`pointer-events-auto pb-10 w-full ${
                             nav.viewMode === "list" ? "flex flex-col gap-4" : 
                             nav.viewMode === "grid" ? "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start" : 
                             "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"
                         }`}
                     >
-                        <AnimatePresence mode="popLayout">
-                          {filteredData.map((item, index) => (
-                              <motion.div 
-                                  key={item.clientKey || item.id} 
-                                  layout={nav.viewMode !== 'grid' ? "position" : false} 
-                                  initial={{ opacity: 0, x: -60, y: -20, scale: 0.95 }}
-                                  animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                                  exit={{ opacity: 0, scale: 0.9 }}
-                                  className={`lasso-selectable relative z-0 hover:z-50 ${nav.viewMode === 'grid' ? 'w-full' : 'h-full w-full'}`}
-                                  data-id={item.id}
-                                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                              >
-                                 <MemoizedMasonryCard 
-                                     customFolders={customFolders} 
-                                     customLists={customLists} 
-                                     onMoveToFolder={moveItemToFolder} 
-                                     onMoveToList={moveItemToList} 
-                                     onUpdateTags={updateItemTags} 
-                                     onTagClick={(tag: string) => updateNav({ categoryType: "tag", category: tag, viewMode: "grid" })} 
-                                     viewMode={nav.viewMode} 
-                                     item={item} 
-                                     theme={theme} 
-                                     isDark={isDark} 
-                                     inTrash={nav.categoryType === "trash"} 
-                                     activeWorkspace={nav.workspace} 
-                                     currentUserId={session?.user?.id} 
-                                     teamRole={teamRole} 
-                                     teamMembers={teamMembers} 
-                                     onRestore={restoreFromTrash} 
-                                     onHardDelete={hardDelete} 
-                                     onDelete={moveToTrash} 
-                                     onUpdateSticky={updateStickyNote} 
-                                     toggleItemReaction={toggleItemReaction} 
-                                     toggleChecklistItem={toggleChecklistItem} 
-                                     isSelected={selectedItems.has(item.id)} 
-                                     selectedItems={Array.from(selectedItems)}
-                                     onToggleSelect={handleToggleSelect} 
-                                     isSelectMode={isSelectMode} 
-                                     isActiveKeyboard={activeIndex === index} 
-                                     onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
-                                     onClick={(e: any) => handleOpenItem(item)} 
-                                     currentCategoryType={nav.categoryType}
-                                     currentCategory={nav.category}
-                                     onRemoveFromContext={handleRemoveFromContext}
-                                     onTogglePin={handleTogglePin} 
-                                 />
-                              </motion.div>
+                          {/* 🌟 UPGRADE: Time-Based Grouping (List & Card View) */}
+                          {Object.entries(groupedData).map(([groupName, items]) => (
+                              <React.Fragment key={groupName}>
+                                  {groupName !== "All Items" && (
+                                      <motion.div layout={false} className="col-span-full w-full pt-6 pb-2">
+                                          <h4 className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{groupName}</h4>
+                                      </motion.div>
+                                  )}
+                                  {items.map((item, index) => (
+                                      <motion.div 
+                                          key={item.clientKey || item.id} 
+                                          layout={false} 
+                                          initial={{ opacity: 0, y: 20 }}
+                                          animate={{ opacity: 1, y: 0 }}
+                                          className={`lasso-selectable relative z-0 hover:z-50 ${nav.viewMode === 'grid' ? 'w-full' : 'h-full w-full'}`}
+                                          data-id={item.id}
+                                          transition={{ duration: 0.3, ease: "easeOut", delay: Math.min(index * 0.02, 0.1) }}
+                                      >
+                                          <MemoizedMasonryCard 
+                                              customFolders={customFolders} 
+                                              customLists={customLists} 
+                                              onMoveToFolder={moveItemToFolder} 
+                                              onMoveToList={moveItemToList} 
+                                              onUpdateTags={updateItemTags} 
+                                              onTagClick={(tag: string) => updateNav({ categoryType: "tag", category: tag, viewMode: "grid" })} 
+                                              viewMode={nav.viewMode} 
+                                              item={item} 
+                                              theme={theme} 
+                                              isDark={isDark} 
+                                              inTrash={nav.categoryType === "trash"} 
+                                              activeWorkspace={nav.workspace} 
+                                              currentUserId={session?.user?.id} 
+                                              teamRole={teamRole} 
+                                              teamMembers={teamMembers} 
+                                              onRestore={restoreFromTrash} 
+                                              onHardDelete={hardDelete} 
+                                              onDelete={moveToTrash} 
+                                              onUpdateSticky={updateStickyNote} 
+                                              toggleItemReaction={toggleItemReaction} 
+                                              toggleChecklistItem={toggleChecklistItem} 
+                                              isSelected={selectedItems.has(item.id)} 
+                                              selectedItems={Array.from(selectedItems)}
+                                              onToggleSelect={handleToggleSelect} 
+                                              isSelectMode={isSelectMode} 
+                                              isActiveKeyboard={activeIndex === index} 
+                                              onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
+                                              onClick={(e: any) => handleOpenItem(item)} 
+                                              currentCategoryType={nav.categoryType}
+                                              currentCategory={nav.category}
+                                              onRemoveFromContext={handleRemoveFromContext}
+                                              onTogglePin={handleTogglePin} 
+                                          />
+                                      </motion.div>
+                                  ))}
+                              </React.Fragment>
                           ))}
-                        </AnimatePresence>
                     </motion.div>
                   </AnimatePresence>
 
@@ -2093,7 +2145,7 @@ export default function BrainboardBalanced() {
                           const isToday = isSameDay(day, new Date());
 
                           return (
-                            <div key={day.toString()} className={`min-h-24 md:min-h-35 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? "bg-[#0A0A0C]" : "bg-white") : (isDark ? "bg-[#0A0A0C]/50 opacity-40" : "bg-[#faf8f5] opacity-50")}`}>
+                            <div key={day.toString()} className={`h-32 md:h-48 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? "bg-[#0A0A0C]" : "bg-white") : (isDark ? "bg-[#0A0A0C]/50 opacity-40" : "bg-[#faf8f5] opacity-50")}`}>
                                <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 md:h-10 flex items-center justify-center shrink-0 rounded-full ${isToday ? "bg-teal-500 text-white shadow-lg shadow-teal-900/20" : theme.textMuted}`}>{format(day, "d")}</div>
                                <div className="flex-1 flex flex-col gap-1 md:gap-2 overflow-y-auto custom-scrollbar pr-1">
                                   {dayItems.map(item => {

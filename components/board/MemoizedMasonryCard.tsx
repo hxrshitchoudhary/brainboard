@@ -1,3 +1,4 @@
+// filepath: components/board/MemoizedMasonryCard.tsx
 import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
@@ -5,7 +6,7 @@ import { MoreHorizontal, Folder, List as ListIcon, FileText, X, RotateCcw, Trash
 import { cleanName } from '@/lib/utils';
 import { APPLE_EMOJIS } from './ReactionBar';
 
-export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFolders, customLists, onMoveToFolder, onMoveToList, onUpdateTags, onTagClick, item, theme, isDark, activeWorkspace, currentUserId, teamRole, viewMode, onClick, inTrash, onRestore, onHardDelete, onDelete, onUpdateSticky, toggleItemReaction, toggleChecklistItem, isSelected, onToggleSelect, isSelectMode, onPlayYouTube, teamMembers, isActiveKeyboard, selectedItems, currentCategoryType, currentCategory, onRemoveFromContext }: any) {
+const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolders, customLists, onMoveToFolder, onMoveToList, onUpdateTags, onTagClick, item, theme, isDark, activeWorkspace, currentUserId, teamRole, viewMode, onClick, inTrash, onRestore, onHardDelete, onDelete, onUpdateSticky, toggleItemReaction, toggleChecklistItem, isSelected, onToggleSelect, isSelectMode, onPlayYouTube, teamMembers, isActiveKeyboard, selectedItems, currentCategoryType, currentCategory, onRemoveFromContext }: any) {
   const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
   const youtubeId = ytMatch ? ytMatch[1] : null;
   const isYouTube = !!youtubeId;
@@ -27,6 +28,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
   
   const [isEditingSticky, setIsEditingSticky] = useState(false);
   const [stickyText, setStickyText] = useState(item.ai_summary || "");
+  const [imgLoaded, setImgLoaded] = useState(false); // 🌟 UPGRADE: Progressive Blur Up State
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -187,31 +189,6 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
      });
   };
 
-  const calculateMenuPosition = (e: React.MouseEvent) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      setMenuCoords({ 
-          top: spaceBelow < 250 ? rect.top - 8 : rect.bottom + 8, 
-          right: window.innerWidth - rect.right, 
-          align: spaceBelow < 250 ? 'bottom-up' : 'top-down' 
-      });
-  };
-
-  const openCardMenu = (e: React.MouseEvent) => {
-      e.preventDefault(); e.stopPropagation();
-      calculateMenuPosition(e);
-      setIsCardMenuOpen(true);
-      setIsTagMenuOpen(false);
-      setMenuView('main');
-  };
-
-  const openTagMenu = (e: React.MouseEvent) => {
-      e.preventDefault(); e.stopPropagation();
-      calculateMenuPosition(e);
-      setIsTagMenuOpen(true);
-      setIsCardMenuOpen(false);
-  };
-
   // ---------------------------------------------------------------------------------
   // COMPACT LIST VIEW
   // ---------------------------------------------------------------------------------
@@ -231,7 +208,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
           draggable={!inTrash} 
           onDragStart={handleDragStart as any} 
           onDragEnd={() => { if (typeof window !== 'undefined') (window as any).__bb_drag = null; }}
-          className={`group/list relative rounded-2xl transition-all duration-200 flex flex-row items-center w-full border ${theme.card} ${theme.cardHover} p-3 gap-4 h-18 ${isSelected ? 'ring-2 ring-teal-500 bg-teal-500/5' : ''} ${isActiveKeyboard ? 'ring-2 ring-teal-500/80 shadow-[0_0_20px_rgba(20,184,166,0.2)]' : ''} lasso-selectable cursor-pointer font-sans`}
+          className={`group/list relative rounded-2xl transition-all duration-200 flex flex-row items-center w-full border ${theme.card} ${theme.cardHover} p-3 gap-4 h-18 ${isSelected ? 'ring-2 ring-teal-500 bg-teal-500/5' : ''} ${isActiveKeyboard ? 'ring-2 ring-teal-500/80 shadow-[0_0_20px_rgba(20,184,166,0.2)]' : ''} lasso-selectable cursor-pointer font-sans transform-gpu backface-hidden card-optimize`}
           data-id={item.id}
        >
           {canModify && (
@@ -242,7 +219,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
 
           <div className={`w-12 h-12 shrink-0 rounded-xl overflow-hidden flex items-center justify-center border shadow-sm ${isDark ? 'border-white/10 bg-white/5' : 'border-black/5 bg-black/5'}`}>
              {displayImg ? (
-                 <img src={displayImg} className="w-full h-full object-cover" alt="thumb" draggable={false} />
+                 <img src={displayImg} onLoad={() => setImgLoaded(true)} loading="lazy" decoding="async" className={`w-full h-full object-cover transform-gpu backface-hidden transition-all duration-500 ${imgLoaded ? 'blur-0 opacity-100' : 'blur-sm opacity-50'}`} alt="thumb" draggable={false} />
              ) : (
                  itemType === 'audio' ? <Music size={18} className="text-fuchsia-500 opacity-80" /> :
                  itemType === 'document' ? <FileIcon size={18} className="text-blue-500 opacity-80" /> :
@@ -316,7 +293,6 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                          </button>
                          <div className={`w-full h-px my-1.5 mx-auto ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
                          
-                         {/* Remove from Folder/List Context Action (List View) */}
                          {(currentCategoryType === 'folder' || currentCategoryType === 'list' || currentCategoryType === 'pinned' || currentCategoryType === 'type') && onRemoveFromContext && (
                             <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveFromContext(item.id); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors text-orange-500 hover:bg-orange-500/10 mt-0.5`}>
                                <MinusCircle size={16} strokeWidth={2.5} className="text-orange-500" /> 
@@ -373,14 +349,13 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
       draggable={!inTrash} 
       onDragStart={handleDragStart as any}
       onDragEnd={() => { if (typeof window !== 'undefined') (window as any).__bb_drag = null; }}
-      className={`group/card relative rounded-3xl transition-all duration-200 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isActiveKeyboard ? 'ring-4 ring-teal-500/80 shadow-[0_0_40px_rgba(20,184,166,0.4)] scale-[1.02]' : ''} ${!inTrash ? 'active:cursor-grabbing hover:cursor-grab' : ''} lasso-selectable`}
+      className={`group/card relative rounded-3xl transition-all duration-200 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isActiveKeyboard ? 'ring-4 ring-teal-500/80 shadow-[0_0_40px_rgba(20,184,166,0.4)] scale-[1.02]' : ''} ${!inTrash ? 'active:cursor-grabbing hover:cursor-grab' : ''} lasso-selectable transform-gpu backface-hidden card-optimize`}
       style={{ zIndex: isCardMenuOpen || isTagMenuOpen ? 50 : 10 }}
       data-id={item.id}
     >
       <div className="absolute inset-0 rounded-3xl pointer-events-none border border-white/5 mix-blend-overlay" style={{ zIndex: 10 }}></div>
       <div ref={spotlightRef} className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-200 group-hover/card:opacity-100" style={{ zIndex: 5 }} />
 
-      {/* FIXED ACTION BUTTONS: Now stacked vertically on the right to prevent overlap with the sticky note */}
       {canModify && (
          <div className={`absolute top-4 right-4 flex flex-col items-center justify-start gap-2 pointer-events-auto transition-all duration-300 z-50`} ref={controlsRef}>
             <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleSelect(item.id, e.shiftKey); }} className={`p-2 rounded-full transition-all border shadow-md backdrop-blur-xl active:scale-95 shrink-0 ${isSelected ? 'opacity-100 bg-teal-500 border-teal-500 text-white' : `opacity-0 group-hover/card:opacity-100 ${isDark ? 'bg-black/50 border-white/10 text-white hover:bg-black' : 'bg-white/90 border-black/5 text-zinc-800 hover:bg-white'}` }`}>
@@ -396,7 +371,6 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
          </div>
       )}
 
-      {/* TAMED STICKY NOTE: Moved safely to the Top-Left Corner (-top-4 -left-4) */}
       {hasSticky && (
         <div
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(canModify) setIsEditingSticky(true); }}
@@ -460,7 +434,6 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setStickyText(""); onUpdateSticky(item.id, ""); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><X size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Remove Sticky</button>
                       )}
                       
-                      {/* Remove from Folder/List Context Action (Grid View) */}
                       {(currentCategoryType === 'folder' || currentCategoryType === 'list' || currentCategoryType === 'pinned' || currentCategoryType === 'type') && onRemoveFromContext && (
                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveFromContext(item.id); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors text-orange-500 hover:bg-orange-500/10 mt-0.5`}>
                             <MinusCircle size={16} strokeWidth={2.5} className="text-orange-500" /> 
@@ -507,10 +480,9 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
         {itemType === "image" || itemType === "video" || itemType === "audio" || itemType === "document" ? (
           <div className={`w-full relative font-sans flex-1 flex flex-col justify-between bg-transparent ${viewMode === 'card' ? 'h-full' : 'h-auto'}`}>
             {itemType === "video" && !item.url ? ( 
-              <motion.video src={displayImg} muted autoPlay loop playsInline draggable={false} className={`w-full object-cover transition-transform duration-200 group-hover/card:scale-105 pointer-events-none rounded-t-3xl ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'}`} />
+              <motion.video src={displayImg} muted autoPlay loop playsInline draggable={false} onLoadedData={() => setImgLoaded(true)} className={`w-full object-cover pointer-events-none rounded-t-3xl ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'} transform-gpu backface-hidden transition-all duration-500 ${imgLoaded ? 'blur-0 opacity-100' : 'blur-md opacity-50'}`} />
             ) : displayImg ? (
-              // Forces original image height perfectly due to h-auto and w-full
-              <motion.img src={displayImg} loading="lazy" draggable={false} alt={item.title || "Media"} className={`w-full object-cover transition-transform duration-200 group-hover/card:scale-[1.02] pointer-events-none rounded-t-3xl ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'}`} />
+              <motion.img src={displayImg} loading="lazy" decoding="async" onLoad={() => setImgLoaded(true)} draggable={false} alt={item.title || "Media"} className={`w-full object-cover group-hover/card:scale-[1.02] pointer-events-none rounded-t-3xl min-h-[150px] bg-white/5 dark:bg-black/5 ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'} transform-gpu backface-hidden transition-all duration-500 ${imgLoaded ? 'blur-0 opacity-100' : 'blur-md opacity-50'}`} />
             ) : (
               <div className={`w-full flex items-center justify-center rounded-t-3xl ${itemType === 'audio' || itemType === 'document' ? 'h-24' : 'h-40'} ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
                  {itemType === 'audio' ? <Music size={32} strokeWidth={1.5} className="text-fuchsia-500 opacity-60" /> :
@@ -546,9 +518,8 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
         ) : (itemType === "link" || itemType === "social_video") ? (
           <div className="flex flex-col h-full justify-between font-sans relative">
             {displayImg && (
-              // Enforces shapes strictly: Reels -> vertical (aspect-[9/16]), YouTube / Links -> horizontal (aspect-video)
-              <div className={`w-full shrink-0 border-b ${isDark ? 'border-white/5' : 'border-black/5'} relative overflow-hidden rounded-t-3xl ${viewMode === 'card' ? 'h-40' : (isInstagram ? 'aspect-[9/16]' : 'aspect-video')}`}>
-                 <motion.img layoutId={`media-${item.id}`} src={displayImg} loading="lazy" draggable={false} className="w-full h-full object-cover group-hover/card:scale-[1.02] transition-transform duration-200 pointer-events-none" />
+              <div className={`w-full shrink-0 border-b ${isDark ? 'border-white/5' : 'border-black/5'} relative overflow-hidden rounded-t-3xl bg-white/5 dark:bg-black/5 ${viewMode === 'card' ? 'h-40' : (isInstagram ? 'aspect-[9/16]' : 'aspect-video')}`}>
+                 <motion.img layoutId={`media-${item.id}`} src={displayImg} onLoad={() => setImgLoaded(true)} loading="lazy" decoding="async" draggable={false} className={`w-full h-full object-cover group-hover/card:scale-[1.02] pointer-events-none transform-gpu backface-hidden transition-all duration-500 ${imgLoaded ? 'blur-0 opacity-100' : 'blur-md opacity-50'}`} />
               </div>
             )}
             <div className={`p-5 flex flex-col flex-1 justify-between relative z-10 ${!displayImg ? 'pt-16' : ''} ${viewMode === 'card' ? 'overflow-hidden' : ''}`}>
@@ -662,4 +633,18 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
       </div>
     </motion.div>
   );
+};
+
+export const MemoizedMasonryCard = memo(MemoizedMasonryCardComponent, (prevProps, nextProps) => {
+  return prevProps.isSelected === nextProps.isSelected &&
+         prevProps.item === nextProps.item &&
+         prevProps.viewMode === nextProps.viewMode &&
+         prevProps.isSelectMode === nextProps.isSelectMode &&
+         prevProps.isActiveKeyboard === nextProps.isActiveKeyboard &&
+         prevProps.inTrash === nextProps.inTrash &&
+         prevProps.isDark === nextProps.isDark &&
+         prevProps.currentCategory === nextProps.currentCategory &&
+         prevProps.currentCategoryType === nextProps.currentCategoryType &&
+         prevProps.customFolders === nextProps.customFolders &&
+         prevProps.customLists === nextProps.customLists;
 });
