@@ -1,4 +1,3 @@
-// filepath: app/page.tsx
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef, startTransition } from "react";
@@ -179,6 +178,7 @@ export default function BrainboardBalanced() {
     }
     
     return result.sort((a, b) => {
+      // 1. Optimistic UI first - keeps newly created files pinned at top initially
       const aRecentIdx = recentIds.indexOf(a.id);
       const bRecentIdx = recentIds.indexOf(b.id);
       
@@ -188,10 +188,8 @@ export default function BrainboardBalanced() {
       if (aIsRecent && !bIsRecent) return -1;
       if (!aIsRecent && bIsRecent) return 1;
       if (aIsRecent && bIsRecent) return aRecentIdx - bRecentIdx;
-
-      if (a.is_pinned && !b.is_pinned) return -1;
-      if (!a.is_pinned && b.is_pinned) return 1;
       
+      // 2. Strict chronological fallback - ensures items stay at top when optimistic UI clears
       const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
       const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
       
@@ -1755,7 +1753,7 @@ export default function BrainboardBalanced() {
           )}
         </AnimatePresence>
 
-        {/* 🌟 UPGRADE: Dynamic Frost Sticky Header */}
+        {/* 検 UPGRADE: Dynamic Frost Sticky Header */}
         <header className={`sticky top-0 w-full px-6 md:px-12 pt-6 pb-4 shrink-0 flex items-center justify-between gap-6 z-50 transition-all duration-300 ${isDark ? 'bg-[#0E0E10]/80 border-b border-white/5 backdrop-blur-2xl' : 'bg-white/80 border-b border-black/5 backdrop-blur-2xl'}`}>
           <div className="flex-1 max-w-2xl flex items-center gap-4">
             
@@ -2027,7 +2025,7 @@ export default function BrainboardBalanced() {
         >
            <div className="relative z-10 cursor-auto min-h-full">
                
-               {/* 🌟 UPGRADE: Masonry Skeleton Loaders */}
+               {/* 検 UPGRADE: Masonry Skeleton Loaders */}
                {isLoading && page === 1 ? (
                   <div className={nav.viewMode === "list" ? "flex flex-col gap-4 w-full pointer-events-none" : "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start w-full pointer-events-none"}>
                      {[150, 250, 300, 200, 280, 180, 320, 220, 260, 190, 310, 170, 290, 210, 240].slice(0, nav.viewMode === 'list' ? 8 : 15).map((height, i) => (
@@ -2047,7 +2045,7 @@ export default function BrainboardBalanced() {
                ) : filteredData.length === 0 && nav.viewMode !== "calendar" ? (
                   
                   <div className="flex-1 w-full flex flex-col items-center mt-20 text-center opacity-50 px-4 pointer-events-none">
-                     {/* 🌟 UPGRADE: Contextual Empty States */}
+                     {/* 検 UPGRADE: Contextual Empty States */}
                      <div className={`w-full max-w-lg border border-dashed p-16 flex flex-col items-center justify-center transition-colors shadow-sm rounded-3xl ${isDark ? "border-white/20 bg-white/5" : "border-black/20 bg-black/5"}`}>
                        <EmptyIcon size={64} strokeWidth={1} className={`mb-6 ${theme.textMuted}`} />
                        <h3 className="text-3xl font-black tracking-tight mb-2">{emptyState.title}</h3>
@@ -2069,7 +2067,7 @@ export default function BrainboardBalanced() {
                             "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"
                         }`}
                     >
-                          {/* 🌟 UPGRADE: Time-Based Grouping (List & Card View) */}
+                          {/* 検 UPGRADE: Time-Based Grouping (List & Card View) */}
                           {Object.entries(groupedData).map(([groupName, items]) => (
                               <React.Fragment key={groupName}>
                                   {groupName !== "All Items" && (
@@ -2146,7 +2144,7 @@ export default function BrainboardBalanced() {
 
                           return (
                             <div key={day.toString()} className={`h-32 md:h-48 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? "bg-[#0A0A0C]" : "bg-white") : (isDark ? "bg-[#0A0A0C]/50 opacity-40" : "bg-[#faf8f5] opacity-50")}`}>
-                               <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 md:h-10 flex items-center justify-center shrink-0 rounded-full ${isToday ? "bg-teal-500 text-white shadow-lg shadow-teal-900/20" : theme.textMuted}`}>{format(day, "d")}</div>
+                               <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 h-10 flex items-center justify-center shrink-0 rounded-full ${isToday ? "bg-teal-500 text-white shadow-lg shadow-teal-900/20" : theme.textMuted}`}>{format(day, "d")}</div>
                                <div className="flex-1 flex flex-col gap-1 md:gap-2 overflow-y-auto custom-scrollbar pr-1">
                                   {dayItems.map(item => {
                                      let isYouTube = false;

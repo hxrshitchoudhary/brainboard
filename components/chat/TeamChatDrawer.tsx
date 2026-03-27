@@ -1,3 +1,4 @@
+// filepath: components/chat/TeamChatDrawer.tsx
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Trash2, MessageSquare } from 'lucide-react';
@@ -26,9 +27,12 @@ export function TeamChatDrawer({
                 <h3 className="font-black tracking-tight text-xl flex items-center gap-2">
                    <MessageSquare className="text-teal-500" size={20} strokeWidth={2.5}/> Team Chat
                 </h3>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  {/* UPGRADED: Explicit Admin Clear All Button */}
                   {teamRole === 'admin' && chatMessages.length > 0 && (
-                     <button onClick={clearChat} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full transition-colors" title="Clear Chat"><Trash2 size={16}/></button>
+                     <button onClick={clearChat} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-500 bg-red-500/10 hover:bg-red-500 hover:text-white rounded-full transition-colors shadow-sm" title="Clear All Chats">
+                        <Trash2 size={14}/> <span className="hidden sm:inline">Clear All</span>
+                     </button>
                   )}
                   <button onClick={closeChat} className="p-2 hover:bg-black/5 dark:hover:bg-white/10 rounded-full transition-colors" aria-label="Close Chat"><X size={20} className={theme.textMuted}/></button>
                 </div>
@@ -49,7 +53,7 @@ export function TeamChatDrawer({
                     return (
                        <div key={msg.id} className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
                           <div className={`flex max-w-[85%] gap-3 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                             {!isMe && <img src={msg.creator_avatar} loading="lazy" className="w-8 h-8 rounded-full shadow-sm shrink-0" />}
+                             {!isMe && <img src={msg.creator_avatar} loading="lazy" className="w-8 h-8 rounded-full shadow-sm object-cover shrink-0" />}
                              <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                                {!isMe && <span className={`text-[10px] font-bold uppercase tracking-widest mb-1.5 ml-1 ${theme.textMuted}`}>{cleanName(msg.creator_name)}</span>}
                                <div className={`p-4 rounded-2xl text-sm font-medium leading-relaxed whitespace-pre-wrap shadow-sm ${isMe ? 'bg-teal-600 text-white rounded-tr-sm' : (isDark ? 'bg-white/10 text-zinc-100 rounded-tl-sm' : 'bg-white border border-stone-200 text-stone-800 rounded-tl-sm')}`}>
