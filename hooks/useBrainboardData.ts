@@ -17,11 +17,17 @@ export function useBrainboardData(
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  
+  // BULLETPROOF SORTING: Tracks recently added items to manually lock them to the top of the grid
+  const [recentIds, setRecentIds] = useState<(string | number)[]>([]);
 
   const fetchItems = useCallback(async (pageNum = 1, isLoadMore = false) => {
     if (!session?.user?.id) return;
-    if (!isLoadMore) setIsLoading(true);
+    
+    // CRITICAL FIX: Always enforce loading lock to prevent infinite IntersectionObserver loops
+    setIsLoading(true); 
     updateUi({ isSyncing: true });
+    
     try {
       const PAGE_SIZE = 50;
       const from = (pageNum - 1) * PAGE_SIZE;
@@ -93,6 +99,7 @@ export function useBrainboardData(
                showToast("Database Error: Failed to save note.", true);
             }
             if (data) {
+                setRecentIds(prev => [data.id, ...prev]); // Lock to Top
                 setItems(prev => [data, ...prev.filter(i => String(i.id) !== String(noteToSave.id))]);
                 showToast("Saved successfully!");
             }
@@ -127,7 +134,10 @@ export function useBrainboardData(
       if (error) {
          showToast(`Database Error: ${error.message}`, true);
       }
-      if (data) setItems(prev => [data, ...prev]);
+      if (data) {
+          setRecentIds(prev => [data.id, ...prev]); // Lock to Top
+          setItems(prev => [data, ...prev]);
+      }
       return data;
     } catch (e) {
       showToast("Network Error: Failed to insert.", true);
@@ -147,17 +157,14 @@ export function useBrainboardData(
     }
   };
 
-  // --- BULLETPROOF FOLDER/LIST MOVEMENT ---
   const moveItemToFolder = async (itemId: string | number, folderName: string) => {
     const strId = String(itemId);
     const oldItem = items.find(i => String(i.id) === strId);
     
-    // Optimistic UI update: Erase legacy 'section' visually to ensure page.tsx filter catches 'sections'
     setItems(prev => prev.map(item => String(item.id) === strId ? { ...item, sections: [folderName], section: undefined } : item));
     showToast(`Moved to ${folderName}`);
     
     if (!strId.startsWith('temp-')) {
-        // ONLY update 'sections'. The 'section' column likely triggers a PostgREST schema error.
         const { error } = await supabase.from('assets').update({ sections: [folderName] }).eq('id', itemId);
         if (error) { 
             if (oldItem) setItems(prev => prev.map(item => String(item.id) === strId ? oldItem : item));
@@ -431,6 +438,7 @@ export function useBrainboardData(
     isLoading, page, setPage, hasMore, fetchItems, saveNote, insertItem, updateItemTags, moveItemToFolder, moveItemToList, updateStickyNote, toggleItemReaction, toggleChecklistItem,
     moveToTrash, restoreFromTrash, hardDelete, emptyTrash, renameFolder, deleteFolder, renameList, deleteList,
     bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete,
-    bulkPinItems, bulkChangeType
+    bulkPinItems, bulkChangeType,
+    recentIds, setRecentIds
   };
 }

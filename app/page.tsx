@@ -42,7 +42,6 @@ import { MemoizedMasonryCard } from "@/components/board/MemoizedMasonryCard";
 
 const inter = Inter({ subsets: ['latin'] });
 
-// Safe constants to prevent Turbopack parsing errors
 const NOISE_BG = "url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZmlsdGVyIGlkPSJub2lzZUZpbHRlciI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iNCIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZUZpbHRlcikiLz48L3N2Zz4=')";
 
 export default function BrainboardBalanced() {
@@ -138,7 +137,14 @@ export default function BrainboardBalanced() {
   }, [isLoading, hasMore, fetchItems, page, setPage]);
 
   const filteredData = useMemo(() => {
-    let result = items;
+    const uniqueMap = new Map();
+    for (const item of items) {
+        if (!uniqueMap.has(item.id)) {
+            uniqueMap.set(item.id, item);
+        }
+    }
+    let result = Array.from(uniqueMap.values());
+
     if (nav.workspace === "personal") {
         result = result.filter(item => !item.workspace_id); 
     } else {
@@ -170,10 +176,18 @@ export default function BrainboardBalanced() {
       const q = debouncedSearchQuery.toLowerCase();
       result = result.filter(item => `${item.title || ""} ${item.content || ""} ${(item.tags || []).join(" ")} ${item.ai_summary || ""}`.toLowerCase().includes(q));
     }
+    
     return result.sort((a, b) => {
       if (a.is_pinned && !b.is_pinned) return -1;
       if (!a.is_pinned && b.is_pinned) return 1;
-      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+      
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      
+      const validA = isNaN(timeA) ? 0 : timeA;
+      const validB = isNaN(timeB) ? 0 : timeB;
+      
+      return validB - validA;
     });
   }, [debouncedSearchQuery, nav.category, nav.categoryType, items, nav.workspace]);
 
@@ -653,6 +667,7 @@ export default function BrainboardBalanced() {
       sections: nav.categoryType === "folder" ? [nav.category] : ["Inbox"], 
       list_name: nav.categoryType === "list" ? nav.category : undefined,
       scheduled_for: nav.viewMode === "calendar" ? nav.currentDate.toISOString() : undefined,
+      created_at: new Date().toISOString() 
     };
     setEditingNote(newItem);
   };
@@ -671,9 +686,19 @@ export default function BrainboardBalanced() {
       sections: nav.categoryType === "folder" ? [nav.category] : ["Inbox"], 
       list_name: nav.categoryType === "list" ? nav.category : undefined,
       scheduled_for: nav.viewMode === "calendar" ? nav.currentDate.toISOString() : undefined,
+      created_at: new Date().toISOString() 
     };
     setEditingNote(newItem);
   };
+
+  const handleTogglePin = useCallback(async (id: string | number, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    setItems((prev) => prev.map(i => i.id === id ? { ...i, is_pinned: newStatus } : i));
+    if (!String(id).startsWith('temp-')) {
+        await supabase.from('assets').update({ is_pinned: newStatus }).eq('id', id);
+    }
+    showToast(newStatus ? "Item pinned" : "Item unpinned");
+  }, [setItems, showToast]);
 
   const updateLocalNoteState = useCallback((id: string | number, field: string, value: any) => {
     setItems((prev) => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
@@ -728,7 +753,6 @@ export default function BrainboardBalanced() {
     return newArr;
   };
 
-  // --- NEW: Remove from Context (Kick out of folder/list/type safely) ---
   const handleRemoveFromContext = useCallback((itemId: string | number) => {
       const strId = String(itemId);
       const item = items.find(i => String(i.id) === strId);
@@ -766,7 +790,6 @@ export default function BrainboardBalanced() {
       }
   }, [items, nav.categoryType, nav.category, setItems, showToast]);
 
-  // --- WINDOWS-LIKE EXTERNAL FILE UPLOAD SUPPORT ---
   const processAndUploadFiles = async (files: File[], targetFolderOverride?: string) => {
     if (nav.workspace === "team" && teamRole === "viewer") return showToast("Permission denied.", true);
     if (!session?.user?.id || files.length === 0) return;
@@ -799,7 +822,8 @@ export default function BrainboardBalanced() {
               thumbnail_url: publicUrl, 
               url: type !== "image" ? publicUrl : undefined, 
               sections: [targetFolder], 
-              list_name: targetList || undefined
+              list_name: targetList || undefined,
+              created_at: new Date().toISOString() 
             });
             showToast(`File added to ${targetFolder}!`);
         } catch(error) {
@@ -873,8 +897,12 @@ export default function BrainboardBalanced() {
          showToast(isReel ? "Capturing Reel..." : isYouTube ? "Capturing YouTube..." : "Capturing link...");
          
          const tempId = `temp-${Date.now()}`;
+         const localCreationTime = new Date().toISOString(); 
+         
+         // 1. Assign `clientKey` to prevent Framer Motion from destroying/respawning the component when DB updates it
          let newItem: BentoItem = {
              id: tempId, 
+             clientKey: tempId, 
              user_id: session.user.id, 
              workspace_id: workspace === "team" ? teamWorkspaceId : undefined,
              creator: userName, 
@@ -884,7 +912,7 @@ export default function BrainboardBalanced() {
              ai_summary: undefined, 
              sections: catType === "folder" ? [category, isReel ? "Instagram" : isYouTube ? "YouTube" : "Links"] : ["Inbox", isReel ? "Instagram" : isYouTube ? "YouTube" : "Links"],
              list_name: catType === "list" ? category : undefined, 
-             created_at: new Date().toISOString() 
+             created_at: localCreationTime 
          };
 
          setItems(prev => [newItem, ...prev]);
@@ -934,7 +962,8 @@ export default function BrainboardBalanced() {
                  content: fetchedDescription || undefined, 
                  thumbnail_url: fetchedThumbnail || undefined,
                  sections: newItem.sections, 
-                 list_name: newItem.list_name || undefined
+                 list_name: newItem.list_name || undefined,
+                 created_at: localCreationTime 
              };
              
              Object.keys(dbPayload).forEach(key => { 
@@ -946,7 +975,8 @@ export default function BrainboardBalanced() {
              const { data: dbData, error } = await supabase.from("assets").insert([dbPayload]).select().single();
              
              if (dbData) {
-                 setItems(prev => prev.map(i => i.id === tempId ? dbData : i));
+                 // 2. Transfer the `clientKey` to the Database object so the React Key NEVER changes on screen
+                 setItems(prev => prev.map(i => i.id === tempId ? { ...dbData, clientKey: tempId } : i));
                  showToast(isReel ? "Reel captured!" : isYouTube ? "YouTube saved!" : "Link saved!");
              } else {
                  setItems(prev => prev.filter(i => i.id !== tempId));
@@ -961,11 +991,13 @@ export default function BrainboardBalanced() {
                  url: text, 
                  title: "Saved Link", 
                  sections: newItem.sections,
-                 thumbnail_url: isYouTube && youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : undefined
+                 thumbnail_url: isYouTube && youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : undefined,
+                 created_at: localCreationTime 
              };
              const { data: dbData } = await supabase.from("assets").insert([fallbackPayload]).select().single();
              if (dbData) {
-                 setItems(prev => prev.map(i => i.id === tempId ? dbData : i));
+                 // Transfer `clientKey` on fallback as well
+                 setItems(prev => prev.map(i => i.id === tempId ? { ...dbData, clientKey: tempId } : i));
              } else {
                  setItems(prev => prev.filter(i => i.id !== tempId));
              }
@@ -1947,7 +1979,7 @@ export default function BrainboardBalanced() {
         >
            <div className="relative z-10 cursor-auto min-h-full">
                {isLoading && page === 1 ? (
-                  <div className={nav.viewMode === "grid" ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6 space-y-6 pointer-events-none" : nav.viewMode === "list" ? "flex flex-col gap-3 pointer-events-none" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pointer-events-none"}>
+                  <div className={nav.viewMode === "grid" ? "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start pointer-events-none" : nav.viewMode === "list" ? "flex flex-col gap-3 pointer-events-none" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 pointer-events-none"}>
                      {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                         <div key={i} className={`border relative overflow-hidden ${theme.card} ${nav.viewMode === 'list' ? 'h-18' : 'h-64 md:h-85'} break-inside-avoid w-full mb-6 rounded-3xl`}>
                            <div className={`absolute inset-0 -translate-x-full bg-linear-to-r from-transparent ${isDark ? "via-white/5" : "via-black/5"} to-transparent animate-shimmer`} />
@@ -1964,7 +1996,7 @@ export default function BrainboardBalanced() {
                   </div>
                   
                ) : nav.viewMode !== "calendar" ? (
-                  <AnimatePresence mode="wait">
+                  <AnimatePresence mode="popLayout">
                     <motion.div 
                         key={nav.viewMode}
                         initial={{ opacity: 0, y: 15 }}
@@ -1973,22 +2005,21 @@ export default function BrainboardBalanced() {
                         transition={{ duration: 0.2, ease: "easeInOut" }}
                         className={`pointer-events-auto pb-10 w-full ${
                             nav.viewMode === "list" ? "flex flex-col gap-4" : 
-                            nav.viewMode === "grid" ? "columns-2 sm:columns-2 lg:columns-3 xl:columns-4 2xl:columns-5 gap-6" : 
+                            nav.viewMode === "grid" ? "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start" : 
                             "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"
                         }`}
                     >
                         <AnimatePresence mode="popLayout">
                           {filteredData.map((item, index) => (
                               <motion.div 
-                                  key={item.id} 
+                                  key={item.clientKey || item.id} 
                                   layout={nav.viewMode !== 'grid' ? "position" : false} 
-                                  variants={cardVariants} 
-                                  initial="hidden" 
-                                  animate="visible" 
-                                  exit="exit" 
-                                  className={`lasso-selectable relative z-0 hover:z-50 ${nav.viewMode === 'grid' ? 'break-inside-avoid inline-block w-full mb-6' : 'h-full w-full'}`}
+                                  initial={{ opacity: 0, x: -60, y: -20, scale: 0.95 }}
+                                  animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.9 }}
+                                  className={`lasso-selectable relative z-0 hover:z-50 ${nav.viewMode === 'grid' ? 'w-full' : 'h-full w-full'}`}
                                   data-id={item.id}
-                                  transition={{ duration: 0.15, ease: "easeOut" }}
+                                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                               >
                                  <MemoizedMasonryCard 
                                      customFolders={customFolders} 
@@ -2022,6 +2053,7 @@ export default function BrainboardBalanced() {
                                      currentCategoryType={nav.categoryType}
                                      currentCategory={nav.category}
                                      onRemoveFromContext={handleRemoveFromContext}
+                                     onTogglePin={handleTogglePin} 
                                  />
                               </motion.div>
                           ))}

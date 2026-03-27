@@ -6,7 +6,7 @@ import { cleanName } from '@/lib/utils';
 import { APPLE_EMOJIS } from './ReactionBar';
 
 export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFolders, customLists, onMoveToFolder, onMoveToList, onUpdateTags, onTagClick, item, theme, isDark, activeWorkspace, currentUserId, teamRole, viewMode, onClick, inTrash, onRestore, onHardDelete, onDelete, onUpdateSticky, toggleItemReaction, toggleChecklistItem, isSelected, onToggleSelect, isSelectMode, onPlayYouTube, teamMembers, isActiveKeyboard, selectedItems, currentCategoryType, currentCategory, onRemoveFromContext }: any) {
-  const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
   const youtubeId = ytMatch ? ytMatch[1] : null;
   const isYouTube = !!youtubeId;
   const isInstagram = item.url?.includes('instagram.com');
@@ -28,6 +28,10 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
   const [isEditingSticky, setIsEditingSticky] = useState(false);
   const [stickyText, setStickyText] = useState(item.ai_summary || "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setStickyText(item.ai_summary || "");
+  }, [item.ai_summary]);
   
   const [isCardMenuOpen, setIsCardMenuOpen] = useState(false);
   const [isTagMenuOpen, setIsTagMenuOpen] = useState(false);
@@ -376,31 +380,30 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
       <div className="absolute inset-0 rounded-3xl pointer-events-none border border-white/5 mix-blend-overlay" style={{ zIndex: 10 }}></div>
       <div ref={spotlightRef} className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 transition duration-200 group-hover/card:opacity-100" style={{ zIndex: 5 }} />
 
-      {/* ACTION BUTTONS (Select, Tag, Menu) */}
+      {/* FIXED ACTION BUTTONS: Safe top-right, absolutely protected from overlap */}
       {canModify && (
-         <div className={`absolute top-4 flex items-center gap-2 pointer-events-auto transition-all duration-300 ease-out ${hasSticky ? 'right-25' : 'right-4'}`} ref={controlsRef} style={{ zIndex: 30 }}>
-            
-            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleSelect(item.id, e.shiftKey); }} className={`p-2 rounded-full transition-all border shadow-md backdrop-blur-xl active:scale-95 ${isSelected ? 'opacity-100 bg-teal-500 border-teal-500 text-white' : `opacity-0 group-hover/card:opacity-100 ${isDark ? 'bg-black/50 border-white/10 text-white hover:bg-black' : 'bg-white/90 border-black/5 text-zinc-800 hover:bg-white'}` }`}>
+         <div className={`absolute top-4 right-4 flex flex-nowrap items-center justify-end gap-2 pointer-events-auto transition-all duration-300 z-50`} ref={controlsRef}>
+            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleSelect(item.id, e.shiftKey); }} className={`p-2 rounded-full transition-all border shadow-md backdrop-blur-xl active:scale-95 shrink-0 ${isSelected ? 'opacity-100 bg-teal-500 border-teal-500 text-white' : `opacity-0 group-hover/card:opacity-100 ${isDark ? 'bg-black/50 border-white/10 text-white hover:bg-black' : 'bg-white/90 border-black/5 text-zinc-800 hover:bg-white'}` }`}>
                <Check size={14} strokeWidth={isSelected ? 3 : 2.5} />
             </button>
 
             {!inTrash && !isSelectMode && (
                <>
-                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsTagMenuOpen(true); setIsCardMenuOpen(false); }} className={`p-2 rounded-full opacity-0 group-hover/card:opacity-100 transition-all border shadow-lg backdrop-blur-xl active:scale-95 ${isTagMenuOpen ? 'opacity-100 bg-teal-500 text-white border-teal-500' : isDark ? 'bg-black/50 border-white/10 text-white hover:bg-black' : 'bg-white/90 border-black/5 text-zinc-800 hover:bg-white'}`}><Hash size={14} strokeWidth={2.5} /></button>
-                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsCardMenuOpen(true); setIsTagMenuOpen(false); setMenuView('main'); }} className={`p-2 rounded-full opacity-0 group-hover/card:opacity-100 transition-all border shadow-lg backdrop-blur-xl active:scale-95 ${isCardMenuOpen ? 'opacity-100 bg-teal-500 text-white border-teal-500' : isDark ? 'bg-black/50 border-white/10 text-white hover:bg-black' : 'bg-white/90 border-black/5 text-zinc-800 hover:bg-white'}`}><MoreHorizontal size={14} strokeWidth={2.5} /></button>
+                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsTagMenuOpen(true); setIsCardMenuOpen(false); }} className={`p-2 rounded-full opacity-0 group-hover/card:opacity-100 transition-all border shadow-lg backdrop-blur-xl active:scale-95 shrink-0 ${isTagMenuOpen ? 'opacity-100 bg-teal-500 text-white border-teal-500' : isDark ? 'bg-black/50 border-white/10 text-white hover:bg-black' : 'bg-white/90 border-black/5 text-zinc-800 hover:bg-white'}`}><Hash size={14} strokeWidth={2.5} /></button>
+                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsCardMenuOpen(true); setIsTagMenuOpen(false); setMenuView('main'); }} className={`p-2 rounded-full opacity-0 group-hover/card:opacity-100 transition-all border shadow-lg backdrop-blur-xl active:scale-95 shrink-0 ${isCardMenuOpen ? 'opacity-100 bg-teal-500 text-white border-teal-500' : isDark ? 'bg-black/50 border-white/10 text-white hover:bg-black' : 'bg-white/90 border-black/5 text-zinc-800 hover:bg-white'}`}><MoreHorizontal size={14} strokeWidth={2.5} /></button>
                </>
             )}
          </div>
       )}
 
-      {/* STICKY NOTE: Positioned Top-Right, slightly overlapping the edge */}
+      {/* TAMED STICKY NOTE: Moved safely to the Top-Left Corner (-top-4 -left-4) */}
       {hasSticky && (
         <div
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(canModify) setIsEditingSticky(true); }}
-          className={`absolute -top-4 -right-4 z-40 w-28 h-28 bg-[#FDE047] text-yellow-900 p-3 shadow-[0_15px_35px_rgba(0,0,0,0.3)] font-sans text-[11px] font-bold leading-relaxed flex flex-col items-center justify-center rounded-br-2xl rounded-tr-md rounded-bl-md rounded-tl-sm pointer-events-auto border border-yellow-300 transition-transform duration-200 origin-bottom-left ${canModify && !isSelectMode ? 'cursor-text hover:scale-105' : 'cursor-default'}`}
-          style={{ transform: 'rotate(4deg)' }}
+          className={`absolute -top-4 -left-4 z-40 w-24 h-24 bg-[#FDE047] text-yellow-900 p-2.5 shadow-[0_15px_35px_rgba(0,0,0,0.3)] font-sans text-[10px] font-bold leading-tight flex flex-col items-center justify-center rounded-bl-2xl rounded-tr-md rounded-br-md rounded-tl-sm pointer-events-auto border border-yellow-300 transition-transform duration-200 origin-bottom-right ${canModify && !isSelectMode ? 'cursor-text hover:scale-105' : 'cursor-default'}`}
+          style={{ transform: 'rotate(-4deg)' }}
         >
-            <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-8 h-4 bg-white/40 backdrop-blur-md shadow-sm rounded-sm" style={{ transform: 'rotate(-3deg)' }} />
+            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-6 h-3 bg-white/40 backdrop-blur-md shadow-sm rounded-sm" style={{ transform: 'rotate(2deg)' }} />
             {isEditingSticky ? (
                 <textarea ref={textareaRef} autoFocus value={stickyText} onChange={handleStickyChange} onBlur={handleStickyBlur} className="w-full h-full bg-transparent text-yellow-900 outline-none resize-none placeholder:text-yellow-900/50 text-center font-bold custom-scrollbar" placeholder="Note..." />
             ) : (
@@ -506,6 +509,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
             {itemType === "video" && !item.url ? ( 
               <motion.video src={displayImg} muted autoPlay loop playsInline draggable={false} className={`w-full object-cover transition-transform duration-200 group-hover/card:scale-105 pointer-events-none rounded-t-3xl ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'}`} />
             ) : displayImg ? (
+              // Forces original image height perfectly due to h-auto and w-full
               <motion.img src={displayImg} loading="lazy" draggable={false} alt={item.title || "Media"} className={`w-full object-cover transition-transform duration-200 group-hover/card:scale-[1.02] pointer-events-none rounded-t-3xl ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'}`} />
             ) : (
               <div className={`w-full flex items-center justify-center rounded-t-3xl ${itemType === 'audio' || itemType === 'document' ? 'h-24' : 'h-40'} ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
@@ -542,7 +546,8 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
         ) : (itemType === "link" || itemType === "social_video") ? (
           <div className="flex flex-col h-full justify-between font-sans relative">
             {displayImg && (
-              <div className={`w-full shrink-0 border-b ${isDark ? 'border-white/5' : 'border-black/5'} relative overflow-hidden rounded-t-3xl ${viewMode === 'card' ? 'h-40' : (isInstagram ? 'aspect-4/5' : isYouTube ? 'aspect-video' : 'h-40')}`}>
+              // Enforces shapes strictly: Reels -> vertical (aspect-[9/16]), YouTube / Links -> horizontal (aspect-video)
+              <div className={`w-full shrink-0 border-b ${isDark ? 'border-white/5' : 'border-black/5'} relative overflow-hidden rounded-t-3xl ${viewMode === 'card' ? 'h-40' : (isInstagram ? 'aspect-[9/16]' : 'aspect-video')}`}>
                  <motion.img layoutId={`media-${item.id}`} src={displayImg} loading="lazy" draggable={false} className="w-full h-full object-cover group-hover/card:scale-[1.02] transition-transform duration-200 pointer-events-none" />
               </div>
             )}
@@ -553,7 +558,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
                   </div>
               )}
               <div className="z-10 mt-auto w-full">
-                <h3 className={`font-black text-lg mb-2 tracking-tight leading-snug line-clamp-2 ${theme.text}`}>{item.title || "Untitled Link"}</h3>
+                <h3 className={`font-bold text-base mb-1 tracking-tight leading-snug line-clamp-2 ${theme.text}`}>{item.title || "Untitled Link"}</h3>
                 {itemType === 'social_video' ? (
                     <p className={`text-[10px] flex items-center gap-1.5 truncate font-bold uppercase tracking-widest ${theme.textMuted}`}>
                        {item.content || "Video"}
@@ -571,7 +576,7 @@ export const MemoizedMasonryCard = memo(function MemoizedMasonryCard({ customFol
           <div className={`p-5 md:p-6 pt-16 md:pt-16 flex flex-col relative flex-1 ${viewMode === 'card' ? 'h-full' : 'h-full min-h-48'}`}>
             {item.video_url && <div className="mb-4 inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/10 text-teal-600 dark:text-teal-400 rounded-full text-[10px] font-bold uppercase tracking-widest self-start shrink-0"><Clock size={12}/> Timestamp Note</div>}
             
-            {item.title && <h3 className={`font-black text-xl md:text-2xl mb-3 tracking-tighter leading-snug pb-1 w-[85%] shrink-0 ${theme.text}`}>{item.title}</h3>}
+            {item.title && <h3 className={`font-black text-lg md:text-xl mb-3 tracking-tighter leading-snug pb-1 w-[85%] shrink-0 ${theme.text}`}>{item.title}</h3>}
 
             <div className={`text-sm font-medium leading-relaxed whitespace-pre-wrap flex-1 pb-8 overflow-hidden ${viewMode === 'card' ? 'line-clamp-4' : ''} ${theme.textMuted}`}>
                {item.is_checklist && item.checklist_items ? (

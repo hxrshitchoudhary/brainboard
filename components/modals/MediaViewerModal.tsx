@@ -165,10 +165,10 @@ export const MediaViewerModal = ({ media, updateMedia, closeMediaViewer, items }
             </motion.div>
           </div>
 
-          {/* Metadata Display */}
-          <div className="absolute bottom-0 inset-x-0 p-8 pb-24 flex flex-col items-center text-center z-[40] bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none">
-            <h2 className="text-white text-2xl font-black tracking-tight mb-2 drop-shadow-2xl">{media.item.title || "Untitled Upload"}</h2>
-            {media.item.content && <p className="text-white/80 text-sm font-medium max-w-2xl drop-shadow-xl">{media.item.content}</p>}
+          {/* Metadata Display - Cleaned and Reduced font sizes */}
+          <div className="absolute bottom-0 inset-x-0 p-6 pb-12 flex flex-col items-center text-center z-[40] bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none">
+            <h2 className="text-white text-lg md:text-xl font-bold tracking-tight mb-1 drop-shadow-2xl">{media.item.title || "Untitled Upload"}</h2>
+            {media.item.content && <p className="text-white/80 text-xs md:text-sm font-medium max-w-2xl drop-shadow-xl">{media.item.content}</p>}
           </div>
 
           {/* Glass Toolbar for Zoom Controls */}

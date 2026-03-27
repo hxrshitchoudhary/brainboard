@@ -38,6 +38,7 @@ export interface BentoItem {
   scheduled_for?: string | null;
   updated_at?: string;
   created_at?: string;
+  client_timestamp?: number; // Safely added to prevent TypeScript errors
 }
 
 export interface NotificationItem {

@@ -53,7 +53,6 @@ export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, on
        setIsMenuOpen(true);
    };
 
-   // --- WINDOWS-LIKE DRAG AND DROP HANDLERS ---
    const handleDragEnter = (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -80,11 +79,9 @@ export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, on
       
       let parsed = null;
       
-      // 1. Check highly reliable global fallback
       if (typeof window !== 'undefined' && (window as any).__bb_drag) {
           parsed = (window as any).__bb_drag;
       } else {
-          // 2. Check standard event data
           const internalData = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
           if (internalData) {
              try { parsed = JSON.parse(internalData); } catch (err) {}
@@ -99,10 +96,9 @@ export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, on
          }
          
          if (typeof window !== 'undefined') (window as any).__bb_drag = null;
-         return; // Early exit so we don't accidentally treat the drag as a file drop
+         return; 
       }
 
-      // Handle External Files dropped directly onto this folder from Desktop
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0 && onDropFiles) {
           onDropFiles(Array.from(e.dataTransfer.files));
       }
@@ -133,14 +129,17 @@ export const SidebarEditableItem = ({ icon, label, active, onClick, onRename, on
             <div className="flex items-center relative">
                <button 
                    onClick={onClick} 
-                   className={`flex-1 flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-bold transition-all border border-transparent ${
+                   className={`relative flex-1 flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm font-bold transition-all border border-transparent overflow-hidden ${
                       isDragOver 
                          ? 'bg-teal-500/20 text-teal-500 border-teal-500/50 shadow-inner scale-[1.02]' 
                          : active 
-                            ? (isDark ? 'bg-white/10 text-white shadow-inner' : 'bg-black/5 text-black shadow-inner') 
+                            ? (isDark ? 'bg-white/5 border-white/5 text-teal-400' : 'bg-black/5 border-black/5 text-teal-600') 
                             : `${theme.textMuted} ${theme.btnGhost}`
                    }`}
                >
+                   {/* Active Indicator Accent Line */}
+                   {active && <div className="absolute left-0 top-0 bottom-0 w-1 bg-teal-500 rounded-r-full" />}
+                   
                    <span className={`pointer-events-none ${active || isDragOver ? 'text-teal-500' : ''}`}>{icon}</span>
                    <span className="truncate pointer-events-none">{label}</span>
                </button>

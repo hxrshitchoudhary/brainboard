@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 
@@ -11,6 +11,18 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "Brainboard | Curate your thoughts",
   description: "A beautiful, tactile workspace designed for teams to capture links, ideas, and media.",
+};
+
+// EXPORT VIEWPORT SEPARATELY (Fixes Next.js 14/15 errors)
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, // Prevents input zoom on iOS
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#09090B" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090B" }
+  ],
 };
 
 export default function RootLayout({

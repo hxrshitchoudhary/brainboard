@@ -29,11 +29,9 @@ export function SidebarItem({ icon, label, active, onClick, theme, isDark, onDro
      
      let parsed = null;
      
-     // 1. Check highly reliable global fallback
      if (typeof window !== 'undefined' && (window as any).__bb_drag) {
          parsed = (window as any).__bb_drag;
      } else {
-         // 2. Check standard event data
          const internalData = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
          if (internalData) {
             try { parsed = JSON.parse(internalData); } catch (err) {}
@@ -48,10 +46,9 @@ export function SidebarItem({ icon, label, active, onClick, theme, isDark, onDro
         }
         
         if (typeof window !== 'undefined') (window as any).__bb_drag = null;
-        return; // Early exit so we don't accidentally treat the drag as a file drop
+        return; 
      }
 
-     // 3. Fallback: Local computer file drops
      if (e.dataTransfer.files && e.dataTransfer.files.length > 0 && onDropFiles) {
          onDropFiles(Array.from(e.dataTransfer.files));
      }
@@ -64,7 +61,7 @@ export function SidebarItem({ icon, label, active, onClick, theme, isDark, onDro
        onDragLeave={handleDragLeave}
        onDragOver={handleDragOver}
        onDrop={handleDrop}
-       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all group ${
+       className={`relative w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-bold transition-all overflow-hidden group ${
           isDragOver 
              ? 'bg-teal-500/20 border border-teal-500/50 shadow-inner text-teal-500 scale-[1.02]' 
              : active 
@@ -72,6 +69,9 @@ export function SidebarItem({ icon, label, active, onClick, theme, isDark, onDro
                 : `border border-transparent ${theme.btnGhost}`
        }`}
     >
+      {/* Active Indicator Accent Line */}
+      {active && <div className="absolute left-0 top-0 bottom-0 w-1 bg-teal-500 rounded-r-full" />}
+      
       <div className="flex items-center gap-3.5 pointer-events-none">
         <div className={`transition-colors pointer-events-none ${active || isDragOver ? 'text-inherit' : 'text-stone-500 group-hover:text-stone-900 dark:group-hover:text-zinc-100'}`}>{icon}</div>
         <span className="truncate pointer-events-none">{label}</span>
