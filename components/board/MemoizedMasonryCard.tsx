@@ -28,11 +28,14 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
   
   const [isEditingSticky, setIsEditingSticky] = useState(false);
   const [stickyText, setStickyText] = useState(item.ai_summary || "");
+  const [isStickyVisible, setIsStickyVisible] = useState(!!item.ai_summary);
+  const [stickyColor, setStickyColor] = useState<'yellow' | 'pink' | 'blue' | 'green'>('yellow');
   const [imgLoaded, setImgLoaded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setStickyText(item.ai_summary || "");
+    setIsStickyVisible(!!item.ai_summary);
   }, [item.ai_summary]);
   
   const [isCardMenuOpen, setIsCardMenuOpen] = useState(false);
@@ -62,7 +65,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
   };
 
   const [tagInput, setTagInput] = useState((item.tags || []).join(', '));
-  const hasSticky = !inTrash && (stickyText || isEditingSticky);
+  const hasSticky = !inTrash && isStickyVisible;
   
   useEffect(() => { if (isTagMenuOpen) setTagInput((item.tags || []).join(', ')); }, [isTagMenuOpen, item.tags]);
   useEffect(() => { if (!isCardMenuOpen) setTimeout(() => setMenuView('main'), 150); }, [isCardMenuOpen]);
@@ -83,6 +86,21 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
   const handleStickyChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { setStickyText(e.target.value); };
   const handleStickyBlur = () => { setIsEditingSticky(false); if (stickyText !== item.ai_summary && onUpdateSticky) { onUpdateSticky(item.id, stickyText); } };
   
+  const cycleStickyColor = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const colors: ('yellow' | 'pink' | 'blue' | 'green')[] = ['yellow', 'pink', 'blue', 'green'];
+      const nextIndex = (colors.indexOf(stickyColor) + 1) % colors.length;
+      setStickyColor(colors[nextIndex]);
+  };
+
+  const stickyColorClasses = {
+      yellow: 'from-[#FEF08A] to-[#FDE047] text-yellow-900 border-yellow-400',
+      pink: 'from-[#FBCFE8] to-[#F9A8D4] text-pink-900 border-pink-400',
+      blue: 'from-[#BAE6FD] to-[#93C5FD] text-blue-900 border-blue-400',
+      green: 'from-[#BBF7D0] to-[#86EFAC] text-green-900 border-green-400',
+  };
+
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => { 
       e.dataTransfer.effectAllowed = 'all'; 
       
@@ -246,19 +264,22 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
           )}
 
           {hasSticky && (
-             <div
+             <motion.div
+                initial={{ scale: 0.5, opacity: 0, rotate: -10 }}
+                animate={{ scale: 1, opacity: (!stickyText && !isEditingSticky) ? 0.4 : 1, rotate: 2 }}
+                whileHover={{ opacity: 1, scale: canModify && !isSelectMode ? 1.05 : 1, rotate: 0 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(canModify) setIsEditingSticky(true); }}
-                className={`w-10 h-10 ml-2 bg-gradient-to-br from-[#FEF08A] to-[#FDE047] text-yellow-900 p-1 shadow-sm font-sans text-[7px] font-bold leading-tight flex flex-col items-center justify-center rounded-sm pointer-events-auto border border-yellow-300/50 shrink-0 transition-transform relative z-50 ${canModify && !isSelectMode ? 'cursor-text hover:scale-105' : 'cursor-default'}`}
-                style={{ transform: 'rotate(2deg)' }}
+                className={`relative z-50 w-10 h-10 ml-2 bg-gradient-to-br ${stickyColorClasses[stickyColor]} p-1 drop-shadow-sm font-sans text-[7px] font-bold leading-tight flex flex-col items-center justify-center rounded-sm pointer-events-auto shrink-0 border border-t-white/40 border-l-white/40 border-b-[2px] border-r-[2px] origin-center ${canModify && !isSelectMode ? 'cursor-text' : 'cursor-default'}`}
              >
                  {/* Tape for list view */}
-                 <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-white/50 backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.1)] rounded-sm" style={{ transform: 'rotate(-1deg)' }} />
+                 <div onClick={cycleStickyColor} title="Click to change color" className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-white/60 hover:bg-white/90 backdrop-blur-sm shadow-[0_1px_2px_rgba(0,0,0,0.1)] rounded-sm cursor-pointer transition-colors z-10" style={{ transform: 'rotate(-1deg)' }} />
                  {isEditingSticky ? (
-                     <textarea ref={textareaRef} autoFocus value={stickyText} onChange={handleStickyChange} onBlur={handleStickyBlur} className="w-full h-full bg-transparent text-yellow-900 outline-none resize-none placeholder:text-yellow-900/50 text-center font-bold custom-scrollbar mt-0.5" placeholder="Note" />
+                     <textarea ref={textareaRef} autoFocus value={stickyText} onChange={handleStickyChange} onBlur={handleStickyBlur} className="w-full h-full bg-transparent text-current outline-none resize-none placeholder:text-current placeholder:opacity-50 text-center font-bold custom-scrollbar mt-0.5" placeholder="Note" />
                  ) : (
                      <div className="w-full h-full flex items-center justify-center overflow-hidden mt-0.5"><div className="w-full text-center overflow-hidden line-clamp-3">{stickyText}</div></div>
                  )}
-             </div>
+             </motion.div>
           )}
 
           {/* Centered Portals for List View */}
@@ -351,7 +372,6 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
       draggable={!inTrash} 
       onDragStart={handleDragStart as any}
       onDragEnd={() => { if (typeof window !== 'undefined') (window as any).__bb_drag = null; }}
-      /* REMOVED backface-hidden and transform-gpu from the card to prevent cutting off elements that hang outside! */
       className={`group/card relative rounded-3xl transition-all duration-200 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isActiveKeyboard ? 'ring-4 ring-teal-500/80 shadow-[0_0_40px_rgba(20,184,166,0.4)] scale-[1.02]' : ''} ${!inTrash ? 'active:cursor-grabbing hover:cursor-grab' : ''} lasso-selectable card-optimize`}
       style={{ zIndex: isCardMenuOpen || isTagMenuOpen ? 50 : 10 }}
       data-id={item.id}
@@ -375,14 +395,16 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
       )}
 
       {hasSticky && (
-        <div
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0, rotate: -15 }}
+          animate={{ scale: 1, opacity: (!stickyText && !isEditingSticky) ? 0.4 : 1, rotate: -3 }}
+          whileHover={{ opacity: 1, scale: canModify && !isSelectMode ? 1.05 : 1, rotate: -1 }}
+          transition={{ type: "spring", stiffness: 400, damping: 25 }}
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(canModify) setIsEditingSticky(true); }}
-          /* Positioned half-out (-top-5 -left-5) on a w-24 card */
-          className={`absolute -top-5 -left-5 z-[9999] w-24 h-24 bg-gradient-to-br from-[#FEF08A] to-[#FDE047] text-yellow-900 p-2 shadow-[2px_6px_15px_rgba(0,0,0,0.25)] font-sans text-[11px] font-bold leading-tight flex flex-col items-center justify-center rounded-sm pointer-events-auto border border-yellow-300/60 transition-transform duration-200 origin-center ${canModify && !isSelectMode ? 'cursor-text hover:scale-105' : 'cursor-default'}`}
-          style={{ transform: 'rotate(-3deg)' }}
+          className={`absolute -top-5 -left-5 z-[9999] w-24 h-24 bg-gradient-to-br ${stickyColorClasses[stickyColor]} p-2 drop-shadow-md font-sans text-[11px] font-bold leading-tight flex flex-col items-center justify-center rounded-sm pointer-events-auto border border-t-white/50 border-l-white/50 border-b-[3px] border-r-[3px] origin-center ${canModify && !isSelectMode ? 'cursor-text' : 'cursor-default'}`}
         >
             {/* The little translucent "tape" piece at the top */}
-            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-8 h-3.5 bg-white/60 backdrop-blur-md shadow-[0_1px_3px_rgba(0,0,0,0.15)] rounded-sm" style={{ transform: 'rotate(2deg)' }} />
+            <div onClick={cycleStickyColor} title="Click to change color" className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-8 h-3.5 bg-white/60 hover:bg-white/90 backdrop-blur-md shadow-[0_1px_3px_rgba(0,0,0,0.15)] rounded-sm cursor-pointer transition-colors z-10" style={{ transform: 'rotate(2deg)' }} />
             
             {isEditingSticky ? (
                 <textarea 
@@ -391,7 +413,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                    value={stickyText} 
                    onChange={handleStickyChange} 
                    onBlur={handleStickyBlur} 
-                   className="w-full h-full bg-transparent text-yellow-900 outline-none resize-none placeholder:text-yellow-900/50 text-center font-bold custom-scrollbar mt-1" 
+                   className="w-full h-full bg-transparent text-current outline-none resize-none placeholder:text-current placeholder:opacity-50 text-center font-bold custom-scrollbar mt-1" 
                    placeholder="Note..." 
                 />
             ) : (
@@ -401,7 +423,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                    </div>
                 </div>
             )}
-        </div>
+        </motion.div>
       )}
            
       {/* CENTERED MODAL PORTALS FOR MENUS */}
@@ -446,10 +468,11 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                          <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500"><span className="truncate max-w-20 font-medium text-xs">{item.list_name || 'None'}</span><ChevronRight size={14} /></div>
                       </button>
                       <div className={`w-full h-px my-1.5 mx-auto ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
-                      {!stickyText ? (
-                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsEditingSticky(true); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><FileText size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Add Sticky Note</button>
+                      
+                      {!isStickyVisible ? (
+                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsStickyVisible(true); setIsEditingSticky(true); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><FileText size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Add Sticky Note</button>
                       ) : (
-                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setStickyText(""); onUpdateSticky(item.id, ""); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><X size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Remove Sticky</button>
+                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsStickyVisible(false); setStickyText(""); onUpdateSticky(item.id, ""); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><X size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Remove Sticky</button>
                       )}
                       
                       {(currentCategoryType === 'folder' || currentCategoryType === 'list' || currentCategoryType === 'pinned' || currentCategoryType === 'type') && onRemoveFromContext && (
