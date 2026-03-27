@@ -2,11 +2,11 @@
 import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
-import { MoreHorizontal, Folder, List as ListIcon, FileText, X, RotateCcw, Trash2, Clock, CheckSquare, Square, Music, File as FileIcon, ImageIcon, Globe, Play, Circle, Hash, Check, ChevronRight, ChevronLeft, MinusCircle } from 'lucide-react';
+import { MoreHorizontal, Folder, List as ListIcon, FileText, X, RotateCcw, Trash2, Clock, CheckSquare, Square, Music, File as FileIcon, ImageIcon, Globe, Play, Circle, Hash, Check, ChevronRight, ChevronLeft, MinusCircle, Pin } from 'lucide-react';
 import { cleanName } from '@/lib/utils';
 import { APPLE_EMOJIS } from './ReactionBar';
 
-const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolders, customLists, onMoveToFolder, onMoveToList, onUpdateTags, onTagClick, item, theme, isDark, activeWorkspace, currentUserId, teamRole, viewMode, onClick, inTrash, onRestore, onHardDelete, onDelete, onUpdateSticky, toggleItemReaction, toggleChecklistItem, isSelected, onToggleSelect, isSelectMode, onPlayYouTube, teamMembers, isActiveKeyboard, selectedItems, currentCategoryType, currentCategory, onRemoveFromContext }: any) {
+const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolders, customLists, onMoveToFolder, onMoveToList, onUpdateTags, onTagClick, item, theme, isDark, activeWorkspace, currentUserId, teamRole, viewMode, onClick, inTrash, onRestore, onHardDelete, onDelete, onUpdateSticky, toggleItemReaction, toggleChecklistItem, isSelected, onToggleSelect, isSelectMode, onPlayYouTube, teamMembers, isActiveKeyboard, selectedItems, currentCategoryType, currentCategory, onRemoveFromContext, onTogglePin }: any) {
   const ytMatch = item.url?.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
   const youtubeId = ytMatch ? ytMatch[1] : null;
   const isYouTube = !!youtubeId;
@@ -306,6 +306,13 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                 >
                    {menuView === 'main' ? (
                       <>
+                         {/* UPGRADED: Added Pin Option to Main Menu */}
+                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTogglePin(item.id, item.is_pinned); setIsCardMenuOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
+                            <div className={`flex items-center gap-3 ${item.is_pinned ? 'text-teal-500' : 'text-zinc-600 dark:text-zinc-300'}`}>
+                               <Pin size={16} strokeWidth={2.5} className={item.is_pinned ? 'text-teal-500 fill-current' : 'text-zinc-400 dark:text-zinc-500'} /> 
+                               {item.is_pinned ? 'Unpin' : 'Pin'}
+                            </div>
+                         </button>
                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuView('folder'); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
                             <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300"><Folder size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Folder</div>
                             <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500"><span className="truncate max-w-20 font-medium text-xs">{item.section || item.sections?.[0] || 'None'}</span><ChevronRight size={14} /></div>
@@ -459,6 +466,15 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                          ))}
                       </div>
                       <div className={`w-full h-px my-1.5 mx-auto ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
+                      
+                      {/* UPGRADED: Added Pin Option to Main Menu */}
+                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTogglePin(item.id, item.is_pinned); setIsCardMenuOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
+                         <div className={`flex items-center gap-3 ${item.is_pinned ? 'text-teal-500' : 'text-zinc-600 dark:text-zinc-300'}`}>
+                            <Pin size={16} strokeWidth={2.5} className={item.is_pinned ? 'text-teal-500 fill-current' : 'text-zinc-400 dark:text-zinc-500'} /> 
+                            {item.is_pinned ? 'Unpin' : 'Pin'}
+                         </div>
+                      </button>
+
                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuView('folder'); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
                          <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300"><Folder size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Folder</div>
                          <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500"><span className="truncate max-w-20 font-medium text-xs">{item.section || item.sections?.[0] || 'None'}</span><ChevronRight size={14} /></div>
@@ -666,8 +682,8 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
 
             {activeWorkspace === 'team' && item.creator && (
                <div className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest ${theme.textMuted}`}>
-                   <img src={item.creator_avatar || `https://api.dicebear.com/9.x/shapes/svg?seed=${item.creator}`} className="w-5 h-5 rounded-full border border-white/10 shadow-sm" />
-                   {cleanName(item.creator)}
+                   <img src={teamMembers?.find((m: any) => m.id === item.user_id)?.avatar || item.creator_avatar || `https://api.dicebear.com/9.x/shapes/svg?seed=${item.creator}`} className="w-5 h-5 rounded-full border border-white/10 shadow-sm" alt="creator" />
+                   {cleanName(teamMembers?.find((m: any) => m.id === item.user_id)?.name || item.creator)}
                </div>
             )}
         </div>

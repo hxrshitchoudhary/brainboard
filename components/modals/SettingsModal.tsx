@@ -15,7 +15,8 @@ export function SettingsModal({ ui, updateUi, profile, updateProfile, handleUpda
             onMouseDown={(e) => e.stopPropagation()} 
             className={`relative w-full max-w-5xl h-[90vh] md:h-160 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row border ${isDark ? 'border-white/10 bg-[#121214]/95' : 'border-stone-200 bg-white/95'} backdrop-blur-3xl`}
           >
-            <button aria-label="Close Settings" className={`absolute top-4 right-4 md:top-8 md:right-8 p-3.5 rounded-full transition-colors z-20 active:scale-95 ${isDark ? 'bg-white/5 hover:bg-white/10 text-white' : 'bg-black/5 hover:bg-black/10 text-black'}`} onClick={() => updateUi({ isAccountOpen: false })}><X size={24} strokeWidth={1.5}/></button>
+            {/* UPGRADED: Solid Close Button */}
+            <button aria-label="Close Settings" className={`absolute top-4 right-4 md:top-8 md:right-8 p-3.5 rounded-full transition-colors z-20 active:scale-95 ${isDark ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-black/10 hover:bg-black/20 text-black'}`} onClick={() => updateUi({ isAccountOpen: false })}><X size={24} strokeWidth={1.5}/></button>
             
             {/* Sidebar / Top area on mobile */}
             <div className={`w-full md:w-1/3 flex flex-col items-center justify-start md:justify-center border-b md:border-b-0 md:border-r shrink-0 overflow-y-auto ${isDark ? 'bg-white/2 border-white/5' : 'bg-stone-50/50 border-stone-200'}`}>
@@ -68,7 +69,6 @@ export function SettingsModal({ ui, updateUi, profile, updateProfile, handleUpda
                            <input type="text" value={profile.bio} onChange={e => updateProfile({ bio: e.target.value })} className={`w-full rounded-3xl md:rounded-4xl px-5 py-4 md:px-6 md:py-5 text-sm md:text-base font-bold outline-none transition-all leading-normal shadow-sm ${theme.input}`} placeholder="What do you do?" />
                          </div>
                          <div className="pt-4 md:pt-6 pb-8 md:pb-0">
-                           {/* FIXED: Removed profile.usernameChanged from the disabled array so users can still save display name / bio */}
                            <button onClick={handleUpdateProfile} disabled={profile.isSaving || !profile.username || !profile.displayName} className={`w-full font-black text-lg md:text-xl py-4 md:py-6 rounded-full transition-all flex items-center justify-center gap-3 active:scale-95 ${theme.btnPrimary} disabled:opacity-50 disabled:hover:scale-100`}>
                              {profile.isSaving ? <Loader2 size={24} strokeWidth={2} className="animate-spin" /> : <><CheckCircle2 size={24} strokeWidth={2} /> Save Changes</>}
                            </button>

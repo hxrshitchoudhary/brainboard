@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Inter } from 'next/font/google';
 import { Toaster, toast as sonnerToast } from 'sonner';
 import { Command } from 'cmdk';
+import { DialogTitle, DialogDescription } from '@radix-ui/react-dialog';
 import { supabase } from '@/lib/supabase'; 
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, format, isSameMonth, isSameDay, addMonths, subMonths, formatDistanceToNow, isToday, isYesterday, isThisWeek } from 'date-fns';
 
@@ -1291,34 +1292,36 @@ export default function BrainboardBalanced() {
           open={cmdKOpen} 
           onOpenChange={setCmdKOpen} 
           label="Global Command Menu" 
-          className={`fixed top-[20%] left-1/2 transform -translate-x-1/2 w-[90%] md:w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden backdrop-blur-3xl border ${isDark ? "bg-[#0E0E12]/80 border-white/10" : "bg-white/80 border-black/5"}`} 
+          className={`fixed top-[20%] left-1/2 transform -translate-x-1/2 w-[90%] md:w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden backdrop-blur-3xl border ${isDark ? "bg-[#0E0E12]/90 border-white/10 text-white" : "bg-white/95 border-black/10 text-zinc-900"}`} 
           style={{ zIndex: 9999 }}
       >
-         <Command.Input placeholder="Type a command or search..." className="w-full p-6 bg-transparent outline-none text-xl font-medium text-zinc-900 dark:text-zinc-100 border-b border-black/5 dark:border-white/5" />
+         <DialogTitle className="sr-only">Global Command Menu</DialogTitle>
+         <DialogDescription className="sr-only">Search for commands and actions</DialogDescription>
+         <Command.Input placeholder="Type a command or search..." className={`w-full p-6 bg-transparent outline-none text-xl font-medium border-b ${isDark ? "text-zinc-100 border-white/10 placeholder:text-zinc-500" : "text-zinc-900 border-black/10 placeholder:text-zinc-400"}`} />
          <Command.List className="p-3 max-h-[50vh] overflow-y-auto custom-scrollbar">
             <Command.Empty className="p-6 text-center text-sm font-medium text-stone-500">No results found.</Command.Empty>
             <Command.Group heading="General Actions" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 p-2">
-               <Command.Item onSelect={() => { handleNewNote(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { handleNewNote(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/10 text-zinc-100" : "hover:bg-black/5 text-zinc-900"}`}>
                    <Plus size={18} /> Create New Note
                </Command.Item>
-               <Command.Item onSelect={() => { handleNewChecklist(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { handleNewChecklist(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/10 text-zinc-100" : "hover:bg-black/5 text-zinc-900"}`}>
                    <CheckSquare size={18} /> Create New Checklist
                </Command.Item>
-               <Command.Item onSelect={() => { fileInputRef.current?.click(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { fileInputRef.current?.click(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/10 text-zinc-100" : "hover:bg-black/5 text-zinc-900"}`}>
                    <UploadCloud size={18} /> Upload File / Media
                </Command.Item>
             </Command.Group>
             <Command.Group heading="Navigation" className="text-[10px] font-bold uppercase tracking-widest text-stone-400 p-2 mt-4">
-               <Command.Item onSelect={() => { updateNav({ workspace: "personal" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { updateNav({ workspace: "personal" }); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/10 text-zinc-100" : "hover:bg-black/5 text-zinc-900"}`}>
                    <Users size={18} /> Switch to Personal Workspace
                </Command.Item>
-               <Command.Item onSelect={() => { updateNav({ workspace: "team" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { updateNav({ workspace: "team" }); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/10 text-zinc-100" : "hover:bg-black/5 text-zinc-900"}`}>
                    <Users size={18} /> Switch to Team Workspace
                </Command.Item>
-               <Command.Item onSelect={() => { updateNav({ categoryType: "trash", category: "All" }); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { updateNav({ categoryType: "trash", category: "All" }); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/10 text-zinc-100" : "hover:bg-black/5 text-zinc-900"}`}>
                    <Trash2 size={18} /> Go to Trash
                </Command.Item>
-               <Command.Item onSelect={() => { toggleTheme(); setCmdKOpen(false); }} className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm font-bold text-stone-800 dark:text-zinc-100 mb-1 transition-colors">
+               <Command.Item onSelect={() => { toggleTheme(); setCmdKOpen(false); }} className={`flex items-center gap-3 p-4 rounded-2xl cursor-pointer text-sm font-bold mb-1 transition-colors ${isDark ? "hover:bg-white/10 text-zinc-100" : "hover:bg-black/5 text-zinc-900"}`}>
                    {isDark ? <Sun size={18} /> : <Moon size={18} />} Toggle Theme
                </Command.Item>
             </Command.Group>
@@ -1760,8 +1763,8 @@ export default function BrainboardBalanced() {
             <div className="relative group flex-1">
               <Search className={`absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors ${theme.textMuted} group-focus-within:text-teal-500`} />
               <input type="text" placeholder="Search your mind..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`w-full py-3 pl-12 pr-12 text-sm font-medium outline-none transition-all rounded-2xl ${theme.input} leading-normal`} />
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-1 opacity-50">
-                  <CmdIcon size={12} /><span className="text-[10px] font-bold font-mono">K</span>
+              <div className={`absolute right-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-md border ${isDark ? 'bg-white/10 border-white/5 text-zinc-400' : 'bg-black/5 border-black/5 text-zinc-500'}`}>
+                  <CmdIcon size={12} /><span className="text-[10px] font-bold font-mono tracking-widest">K</span>
               </div>
             </div>
 

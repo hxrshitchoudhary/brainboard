@@ -1,3 +1,4 @@
+// filepath: hooks/useTeamSpace.ts
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from '@/lib/supabase';
 import { BentoItem, NotificationItem, ChatMessage } from "@/app/types";
@@ -16,7 +17,7 @@ export function useTeamSpace(
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [teamRole, setTeamRole] = useState<string>('editor'); 
+  const [teamRole, setTeamRole] = useState<string>('viewer'); // Changed back to secure default
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
   const isChatOpenRef = useRef(isChatOpen);
@@ -39,7 +40,7 @@ export function useTeamSpace(
     }
   }, [session?.user?.id]);
 
-  // Persist notifications to local storage (limit to latest 50 to prevent bloat)
+  // Persist notifications to local storage
   useEffect(() => {
     if (typeof window !== 'undefined' && session?.user?.id) {
         localStorage.setItem(`bb-notifications-${session.user.id}`, JSON.stringify(notifications.slice(0, 50)));
@@ -51,28 +52,31 @@ export function useTeamSpace(
       const { data: workspaceData } = await supabase.from('workspace_members').select('*').eq('workspace_id', teamWorkspaceId);
       const { data: profilesData } = await supabase.from('profiles').select('*');
       
-      const isMeHarshit = currentUser?.email === 'harshiitt33@gmail.com';
+      let currentWorkspaceData = workspaceData || [];
 
-      if (currentUser && !workspaceData?.find(w => w.user_id === currentUser.id) && !isMeHarshit) {
-          await supabase.from('workspace_members').upsert({
+      // Check if user is in workspace.
+      if (currentUser && !currentWorkspaceData.find(w => w.user_id === currentUser.id)) {
+          const isFirstUser = currentWorkspaceData.length === 0;
+          const assignedRole = isFirstUser ? 'admin' : 'viewer'; // Only the very first user gets admin
+          
+          const { error } = await supabase.from('workspace_members').insert({
               workspace_id: teamWorkspaceId,
               user_id: currentUser.id,
-              role: 'editor'
-          }, { onConflict: 'workspace_id, user_id' });
+              role: assignedRole
+          });
+          
+          if (!error) {
+             currentWorkspaceData.push({ workspace_id: teamWorkspaceId, user_id: currentUser.id, role: assignedRole });
+          }
       }
 
       if (profilesData) {
           const profileMap = new Map();
 
           profilesData.forEach(p => {
-              const memberInfo = workspaceData?.find(w => w.user_id === p.id);
-              let r = memberInfo ? memberInfo.role : 'editor'; 
-              
-              const isThisUserHarshit = p.id === currentUser?.id && isMeHarshit; 
-              const looksLikeHarshit = p.username?.includes('harshiitt33') || p.display_name?.toLowerCase().includes('harshit') || isThisUserHarshit;
-              
-              if (r === 'admin' && !looksLikeHarshit) r = 'editor';
-              if (isThisUserHarshit) r = 'admin';
+              const memberInfo = currentWorkspaceData.find(w => w.user_id === p.id);
+              const isInWorkspace = (!!memberInfo && memberInfo.role !== 'none') || p.id === currentUser?.id;
+              let r = memberInfo ? memberInfo.role : 'viewer'; 
 
               profileMap.set(p.id, {
                 id: p.id, 
@@ -83,12 +87,12 @@ export function useTeamSpace(
                 status: (p.id === currentUser?.id || onlineUsersRef.current.includes(p.id)) ? 'online' : 'offline', 
                 lastSeen: new Date(p.updated_at || Date.now()),
                 role: r,
-                inWorkspace: !!memberInfo || p.id === currentUser?.id
+                inWorkspace: isInWorkspace
               });
           });
           
           if (!profileMap.has(currentUser?.id) && currentUser) {
-              const myMemberInfo = workspaceData?.find(w => w.user_id === currentUser.id);
+              const myMemberInfo = currentWorkspaceData.find(w => w.user_id === currentUser.id);
               profileMap.set(currentUser.id, {
                   id: currentUser.id, 
                   name: cleanName(currentUser.user_metadata?.display_name || currentUser.email) || "You",
@@ -96,7 +100,7 @@ export function useTeamSpace(
                   avatar: currentUser.user_metadata?.avatar_url || `https://api.dicebear.com/9.x/shapes/svg?seed=${currentUser.email}`,
                   status: 'online', 
                   lastSeen: new Date(),
-                  role: isMeHarshit ? 'admin' : (myMemberInfo ? myMemberInfo.role : 'editor'),
+                  role: myMemberInfo ? myMemberInfo.role : 'viewer',
                   inWorkspace: true
               });
           }
@@ -108,8 +112,8 @@ export function useTeamSpace(
           if (!myProfile || !myProfile.username || !myProfile.name || myProfile.name === 'Authenticated User') {
               updateUi({ showOnboarding: true });
           } else {
-              if (isMeHarshit) setTeamRole('admin');
-              else setTeamRole(myProfile.role === 'admin' ? 'editor' : myProfile.role);
+              // Simply set the role to whatever the database says. No auto-upgrading!
+              setTeamRole(myProfile.role || 'viewer');
           }
       } else if (currentUser) {
           updateUi({ showOnboarding: true });
@@ -128,7 +132,6 @@ export function useTeamSpace(
     };
     fetchChat();
 
-    // 1. SUPABASE PRESENCE
     const presenceChannel = supabase.channel('team_presence', {
         config: { presence: { key: session.user.id } }
     });
@@ -143,19 +146,12 @@ export function useTeamSpace(
             status: activeIds.includes(m.id) ? 'online' : 'offline'
         })));
     })
-    .on('presence', { event: 'join' }, ({ key, newPresences }) => {
-        console.log('User joined:', key);
-    })
-    .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
-        console.log('User left:', key);
-    })
     .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
             await presenceChannel.track({ online_at: new Date().toISOString() });
         }
     });
 
-    // 2. WATCH FOR NEW USERS IN DATABASE
     const profilesWatcher = supabase.channel('profiles_watcher')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
             fetchProfilesAndRole(session.user);
@@ -166,7 +162,6 @@ export function useTeamSpace(
             fetchProfilesAndRole(session.user);
         }).subscribe();
 
-    // 3. ASSETS & CHAT LIVE SYNC
     const uniqueAssetChannel = `realtime_assets_${Math.random().toString(36).substring(7)}`;
     const uniqueChatChannel = `realtime_messages_${Math.random().toString(36).substring(7)}`;
 
@@ -211,18 +206,43 @@ export function useTeamSpace(
   }, [session?.user?.id, teamWorkspaceId, setItems, showToast, chatScrollRef, fetchProfilesAndRole]);
 
   const handleUpdateMemberRole = async (targetUserId: string, newRole: string) => {
+     // Optimistic UI Update
+     setTeamMembers(prev => prev.map(m => m.id === targetUserId ? { ...m, role: newRole, inWorkspace: newRole !== 'none' } : m));
+
      try {
          if (newRole === 'none') {
-             await supabase.from('workspace_members').delete().eq('workspace_id', teamWorkspaceId).eq('user_id', targetUserId);
-             showToast("Removed from team.");
+             const { error } = await supabase.from('workspace_members')
+                 .delete()
+                 .eq('workspace_id', teamWorkspaceId)
+                 .eq('user_id', targetUserId);
+             if (error) throw error;
          } else {
-             await supabase.from('workspace_members').upsert({ workspace_id: teamWorkspaceId, user_id: targetUserId, role: newRole });
-             showToast(`Role updated to ${newRole}.`);
+             const { data: existing } = await supabase.from('workspace_members')
+                 .select('user_id')
+                 .eq('workspace_id', teamWorkspaceId)
+                 .eq('user_id', targetUserId)
+                 .maybeSingle();
+
+             if (existing) {
+                 const { error } = await supabase.from('workspace_members')
+                     .update({ role: newRole })
+                     .eq('workspace_id', teamWorkspaceId)
+                     .eq('user_id', targetUserId);
+                 if (error) throw error;
+             } else {
+                 const { error } = await supabase.from('workspace_members')
+                     .insert({ workspace_id: teamWorkspaceId, user_id: targetUserId, role: newRole });
+                 if (error) throw error;
+             }
          }
+         
+         showToast(newRole === 'none' ? "Removed from team." : `Role updated to ${newRole}.`);
          fetchProfilesAndRole(session.user);
-     } catch (e) {
-         showToast("Failed to update role", true);
-         console.error(e);
+     } catch (e: any) {
+         showToast(e.message || "Failed to update role", true);
+         console.error("Role Update Error:", e);
+         // Revert the optimistic update on failure
+         fetchProfilesAndRole(session.user);
      }
   };
 

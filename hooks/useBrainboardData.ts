@@ -42,7 +42,9 @@ export function useBrainboardData(
         .range(from, to);
 
       if (error) {
+        console.error("Supabase Sync Error:", error);
         showToast("Failed to sync items.", true);
+        setHasMore(false); // Stops the infinite loading loop
       } else if (data) {
         if (isLoadMore) {
            setItems(prev => {
@@ -64,7 +66,8 @@ export function useBrainboardData(
         setCustomLists(prev => Array.from(new Set([...prev, ...lists])));
       }
     } catch (err) {
-      console.error(err);
+      console.error("Unexpected fetch error:", err);
+      setHasMore(false); // Stops the infinite loading loop on catch as well
     } finally {
       setIsLoading(false);
       updateUi({ isSyncing: false });
@@ -97,6 +100,7 @@ export function useBrainboardData(
         if (isTemp) {
             const { data, error } = await supabase.from('assets').insert([payload]).select().single();
             if (error) {
+               console.error("Insert Note Error:", error);
                showToast("Database Error: Failed to save note.", true);
             }
             if (data) {
@@ -109,6 +113,7 @@ export function useBrainboardData(
             const { error } = await supabase.from('assets').update(payload).eq('id', noteToSave.id);
             
             if (error) {
+                console.error("Update Note Error:", error);
                 if (itemBeforeUpdate) setItems(prev => prev.map(i => String(i.id) === String(noteToSave.id) ? itemBeforeUpdate : i));
                 showToast("Database Error: Failed to update item. Reverting...", true);
             } else {
@@ -124,6 +129,7 @@ export function useBrainboardData(
            setCustomLists(prev => [...new Set([...prev, payload.list_name as string])]);
         }
     } catch (e) {
+        console.error("Save Note Catch Error:", e);
         if (itemBeforeUpdate) setItems(prev => prev.map(i => String(i.id) === String(noteToSave.id) ? itemBeforeUpdate : i));
         showToast("Network Error: Failed to save. Reverting...", true);
     }
@@ -133,6 +139,7 @@ export function useBrainboardData(
     try {
       const { data, error } = await supabase.from('assets').insert([payload]).select().single();
       if (error) {
+         console.error("Insert Item Error:", error);
          showToast(`Database Error: ${error.message}`, true);
       }
       if (data) {
@@ -141,6 +148,7 @@ export function useBrainboardData(
       }
       return data;
     } catch (e) {
+      console.error("Insert Item Catch Error:", e);
       showToast("Network Error: Failed to insert.", true);
     }
   };
@@ -152,6 +160,7 @@ export function useBrainboardData(
     if (!strId.startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ tags: newTags.length > 0 ? newTags : null }).eq('id', id);
         if (error) { 
+            console.error("Update Tags Error:", error);
             if (oldItem) setItems(prev => prev.map(item => String(item.id) === strId ? oldItem : item));
             showToast("Failed to update tags.", true); 
         }
@@ -168,9 +177,9 @@ export function useBrainboardData(
     if (!strId.startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ sections: [folderName] }).eq('id', itemId);
         if (error) { 
+            console.error("Move Folder Error:", error);
             if (oldItem) setItems(prev => prev.map(item => String(item.id) === strId ? oldItem : item));
             showToast("Failed to move item. Reverting...", true); 
-            console.error(error);
         }
     }
   };
@@ -183,6 +192,7 @@ export function useBrainboardData(
     if (!strId.startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ list_name: listName }).eq('id', itemId);
         if (error) { 
+            console.error("Move List Error:", error);
             if (oldItem) setItems(prev => prev.map(item => String(item.id) === strId ? oldItem : item));
             showToast("Failed to add to list. Reverting...", true); 
         }
@@ -200,12 +210,12 @@ export function useBrainboardData(
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ sections: [folderName] }).in('id', realIds);
         if (error) {
+            console.error("Bulk Move Folder Error:", error);
             setItems(prev => prev.map(item => {
                 const old = oldItems.find(o => String(o.id) === String(item.id));
                 return old ? old : item;
             }));
             showToast("Bulk move failed. Reverting...", true); 
-            console.error(error);
         }
     }
   };
@@ -221,6 +231,7 @@ export function useBrainboardData(
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ list_name: listName }).in('id', realIds);
         if (error) {
+            console.error("Bulk Move List Error:", error);
             setItems(prev => prev.map(item => {
                 const old = oldItems.find(o => String(o.id) === String(item.id));
                 return old ? old : item;
@@ -241,6 +252,7 @@ export function useBrainboardData(
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ is_deleted: true }).in('id', realIds);
         if (error) {
+            console.error("Bulk Trash Error:", error);
             setItems(prev => prev.map(item => {
                 const old = oldItems.find(o => String(o.id) === String(item.id));
                 return old ? old : item;
@@ -261,6 +273,7 @@ export function useBrainboardData(
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ is_deleted: false }).in('id', realIds);
         if (error) {
+            console.error("Bulk Restore Error:", error);
             setItems(prev => prev.map(item => {
                 const old = oldItems.find(o => String(o.id) === String(item.id));
                 return old ? old : item;
@@ -278,7 +291,10 @@ export function useBrainboardData(
     const realIds = ids.filter(id => !String(id).startsWith('temp-'));
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').delete().in('id', realIds);
-        if (error) showToast("Bulk hard delete failed.", true); 
+        if (error) {
+            console.error("Bulk Hard Delete Error:", error);
+            showToast("Bulk hard delete failed.", true); 
+        }
     }
   };
 
@@ -293,6 +309,7 @@ export function useBrainboardData(
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ is_pinned: true }).in('id', realIds);
         if (error) {
+            console.error("Bulk Pin Error:", error);
             setItems(prev => prev.map(item => {
                 const old = oldItems.find(o => String(o.id) === String(item.id));
                 return old ? old : item;
@@ -313,6 +330,7 @@ export function useBrainboardData(
     if (realIds.length > 0) {
         const { error } = await supabase.from('assets').update({ type }).in('id', realIds);
         if (error) {
+            console.error("Bulk Type Change Error:", error);
             setItems(prev => prev.map(item => {
                 const old = oldItems.find(o => String(o.id) === String(item.id));
                 return old ? old : item;
@@ -344,6 +362,7 @@ export function useBrainboardData(
            const { error } = await supabase.from('assets').update({ likes: reactionsString }).eq('id', item.id);
            if (error) throw error;
         } catch (e) { 
+           console.error("Toggle Reaction Error:", e);
            showToast("Failed to save reaction", true); 
            setItems(prev => prev.map(i => String(i.id) === String(item.id) ? { ...i, likes: item.likes } : i));
         }
@@ -360,6 +379,7 @@ export function useBrainboardData(
              const { error } = await supabase.from('assets').update({ checklist_items: newItems }).eq('id', item.id); 
              if (error) throw error;
          } catch (e) { 
+             console.error("Toggle Checklist Error:", e);
              setItems(prev => prev.map(i => String(i.id) === String(item.id) ? { ...i, checklist_items: item.checklist_items } : i));
              showToast("Failed to update checklist", true); 
          }
@@ -373,6 +393,7 @@ export function useBrainboardData(
     if (!strId.startsWith('temp-')) {
         const { error } = await supabase.from('assets').update({ ai_summary: newSummary }).eq('id', id);
         if (error) { 
+            console.error("Sticky Note Update Error:", error);
             if (oldItem) setItems(prev => prev.map(item => String(item.id) === strId ? oldItem : item));
             showToast("Failed to save note.", true); 
         }
@@ -387,7 +408,10 @@ export function useBrainboardData(
     setItems(prev => prev.filter(item => !item.is_deleted));
     showToast("Trash Emptied");
     const { error } = await supabase.from('assets').delete().eq('is_deleted', true);
-    if (error) { showToast("Failed to empty trash. Refresh to sync.", true); }
+    if (error) { 
+       console.error("Empty Trash Error:", error);
+       showToast("Failed to empty trash. Refresh to sync.", true); 
+    }
   };
 
   const renameFolder = async (oldName: string, newName: string) => {
@@ -399,7 +423,10 @@ export function useBrainboardData(
             const newSecs = item.sections?.map(s => s === oldName ? trimmed : s) || [];
             await supabase.from('assets').update({ sections: newSecs }).eq('id', item.id);
         }
-    } catch (e) { showToast("Failed to rename folder.", true); }
+    } catch (e) { 
+       console.error("Rename Folder Error:", e);
+       showToast("Failed to rename folder.", true); 
+    }
   };
 
   const deleteFolder = async (folderName: string) => {
@@ -410,7 +437,10 @@ export function useBrainboardData(
             const newSecs = item.sections?.filter(s => s !== folderName) || [];
             await supabase.from('assets').update({ sections: newSecs.length ? newSecs : null }).eq('id', item.id);
         }
-    } catch (e) { showToast("Failed to delete folder.", true); }
+    } catch (e) { 
+       console.error("Delete Folder Error:", e);
+       showToast("Failed to delete folder.", true); 
+    }
   };
 
   const renameList = async (oldName: string, newName: string) => {
@@ -421,7 +451,10 @@ export function useBrainboardData(
         for(const item of itemsToUpdate) {
            await supabase.from('assets').update({ list_name: trimmed }).eq('id', item.id);
         }
-    } catch (e) { showToast("Failed to rename list.", true); }
+    } catch (e) { 
+       console.error("Rename List Error:", e);
+       showToast("Failed to rename list.", true); 
+    }
   };
 
   const deleteList = async (listName: string) => {
@@ -431,7 +464,10 @@ export function useBrainboardData(
         for(const item of itemsToUpdate) {
             await supabase.from('assets').update({ list_name: null }).eq('id', item.id);
         }
-    } catch (e) { showToast("Failed to delete list.", true); }
+    } catch (e) { 
+       console.error("Delete List Error:", e);
+       showToast("Failed to delete list.", true); 
+    }
   };
 
   return {
