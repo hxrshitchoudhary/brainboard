@@ -70,6 +70,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
   useEffect(() => { if (isTagMenuOpen) setTagInput((item.tags || []).join(', ')); }, [isTagMenuOpen, item.tags]);
   useEffect(() => { if (!isCardMenuOpen) setTimeout(() => setMenuView('main'), 150); }, [isCardMenuOpen]);
 
+  // CRITICAL PERMISSION FLAG
   const canModify = activeWorkspace === 'personal' || teamRole !== 'viewer' || item.user_id === currentUserId;
 
   useEffect(() => {
@@ -223,7 +224,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                  else { onClick(e); }
              }
           }}
-          draggable={!inTrash} 
+          draggable={!inTrash && canModify} 
           onDragStart={handleDragStart as any} 
           onDragEnd={() => { if (typeof window !== 'undefined') (window as any).__bb_drag = null; }}
           className={`group/list relative rounded-2xl transition-all duration-200 flex flex-row items-center w-full border ${theme.card} ${theme.cardHover} p-3 gap-4 h-18 ${isSelected ? 'ring-2 ring-teal-500 bg-teal-500/5' : ''} ${isActiveKeyboard ? 'ring-2 ring-teal-500/80 shadow-[0_0_20px_rgba(20,184,166,0.2)]' : ''} lasso-selectable cursor-pointer font-sans transform-gpu backface-hidden card-optimize`}
@@ -252,15 +253,19 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
           </div>
 
           {inTrash ? (
-             <div className="flex items-center gap-2 opacity-0 group-hover/list:opacity-100 transition-opacity pr-2 shrink-0">
-                <button onClick={(e) => { e.stopPropagation(); onRestore(item.id); }} className="p-2.5 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors shadow-sm"><RotateCcw size={14}/></button>
-                <button onClick={(e) => { e.stopPropagation(); onHardDelete(item.id); }} className="p-2.5 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-50 hover:text-white transition-colors shadow-sm"><Trash2 size={14}/></button>
-             </div>
+             canModify && (
+                 <div className="flex items-center gap-2 opacity-0 group-hover/list:opacity-100 transition-opacity pr-2 shrink-0">
+                    <button onClick={(e) => { e.stopPropagation(); onRestore(item.id); }} className="p-2.5 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors shadow-sm"><RotateCcw size={14}/></button>
+                    <button onClick={(e) => { e.stopPropagation(); onHardDelete(item.id); }} className="p-2.5 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-50 hover:text-white transition-colors shadow-sm"><Trash2 size={14}/></button>
+                 </div>
+             )
           ) : (
-             <div className="flex items-center gap-2 opacity-0 group-hover/list:opacity-100 transition-opacity shrink-0">
-                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsTagMenuOpen(true); setIsCardMenuOpen(false); }} className={`p-2 rounded-lg border shadow-sm ${isDark ? 'bg-[#18181B] border-white/10 hover:bg-white/10 text-zinc-300' : 'bg-white border-black/10 hover:bg-zinc-100 text-zinc-600'} transition-colors`}><Hash size={14} strokeWidth={2.5}/></button>
-                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsCardMenuOpen(true); setIsTagMenuOpen(false); setMenuView('main'); }} className={`p-2 rounded-lg border shadow-sm ${isDark ? 'bg-[#18181B] border-white/10 hover:bg-white/10 text-zinc-300' : 'bg-white border-black/10 hover:bg-zinc-100 text-zinc-600'} transition-colors`}><MoreHorizontal size={14} strokeWidth={2.5}/></button>
-             </div>
+             canModify && (
+                 <div className="flex items-center gap-2 opacity-0 group-hover/list:opacity-100 transition-opacity shrink-0">
+                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsTagMenuOpen(true); setIsCardMenuOpen(false); }} className={`p-2 rounded-lg border shadow-sm ${isDark ? 'bg-[#18181B] border-white/10 hover:bg-white/10 text-zinc-300' : 'bg-white border-black/10 hover:bg-zinc-100 text-zinc-600'} transition-colors`}><Hash size={14} strokeWidth={2.5}/></button>
+                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsCardMenuOpen(true); setIsTagMenuOpen(false); setMenuView('main'); }} className={`p-2 rounded-lg border shadow-sm ${isDark ? 'bg-[#18181B] border-white/10 hover:bg-white/10 text-zinc-300' : 'bg-white border-black/10 hover:bg-zinc-100 text-zinc-600'} transition-colors`}><MoreHorizontal size={14} strokeWidth={2.5}/></button>
+                 </div>
+             )
           )}
 
           {hasSticky && (
@@ -283,7 +288,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
           )}
 
           {/* Centered Portals for List View */}
-          {isTagMenuOpen && mounted && typeof document !== 'undefined' && createPortal(
+          {isTagMenuOpen && canModify && mounted && typeof document !== 'undefined' && createPortal(
              <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={(e) => { e.stopPropagation(); setIsTagMenuOpen(false); }}>
                 <motion.div 
                    initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} transition={{ duration: 0.15, ease: "easeOut" }} 
@@ -298,7 +303,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
              </div>, document.body
           )}
 
-          {isCardMenuOpen && mounted && typeof document !== 'undefined' && createPortal(
+          {isCardMenuOpen && canModify && mounted && typeof document !== 'undefined' && createPortal(
              <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={(e) => { e.stopPropagation(); setIsCardMenuOpen(false); }}>
                 <motion.div 
                    initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} transition={{ duration: 0.15, ease: "easeOut" }} 
@@ -306,7 +311,6 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                 >
                    {menuView === 'main' ? (
                       <>
-                         {/* UPGRADED: Added Pin Option to Main Menu */}
                          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTogglePin(item.id, item.is_pinned); setIsCardMenuOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
                             <div className={`flex items-center gap-3 ${item.is_pinned ? 'text-teal-500' : 'text-zinc-600 dark:text-zinc-300'}`}>
                                <Pin size={16} strokeWidth={2.5} className={item.is_pinned ? 'text-teal-500 fill-current' : 'text-zinc-400 dark:text-zinc-500'} /> 
@@ -376,10 +380,10 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
              else { onClick(e); }
          }
       }} 
-      draggable={!inTrash} 
+      draggable={!inTrash && canModify} 
       onDragStart={handleDragStart as any}
       onDragEnd={() => { if (typeof window !== 'undefined') (window as any).__bb_drag = null; }}
-      className={`group/card relative rounded-3xl transition-all duration-200 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isActiveKeyboard ? 'ring-4 ring-teal-500/80 shadow-[0_0_40px_rgba(20,184,166,0.4)] scale-[1.02]' : ''} ${!inTrash ? 'active:cursor-grabbing hover:cursor-grab' : ''} lasso-selectable card-optimize`}
+      className={`group/card relative rounded-3xl transition-all duration-200 flex flex-col w-full border ${theme.card} ${theme.cardHover} ${itemType === 'note' && !inTrash ? 'cursor-text' : inTrash ? 'cursor-default' : 'cursor-pointer'} font-sans ${viewMode === 'card' ? 'h-85' : 'h-full'} ${isSelected ? 'ring-2 ring-teal-500 scale-[0.98]' : ''} ${isActiveKeyboard ? 'ring-4 ring-teal-500/80 shadow-[0_0_40px_rgba(20,184,166,0.4)] scale-[1.02]' : ''} ${!inTrash && canModify ? 'active:cursor-grabbing hover:cursor-grab' : ''} lasso-selectable card-optimize`}
       style={{ zIndex: isCardMenuOpen || isTagMenuOpen ? 50 : 10 }}
       data-id={item.id}
     >
@@ -410,7 +414,6 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(canModify) setIsEditingSticky(true); }}
           className={`absolute -top-5 -left-5 z-[9999] w-24 h-24 bg-gradient-to-br ${stickyColorClasses[stickyColor]} p-2 drop-shadow-md font-sans text-[11px] font-bold leading-tight flex flex-col items-center justify-center rounded-sm pointer-events-auto border border-t-white/50 border-l-white/50 border-b-[3px] border-r-[3px] origin-center ${canModify && !isSelectMode ? 'cursor-text' : 'cursor-default'}`}
         >
-            {/* The little translucent "tape" piece at the top */}
             <div onClick={cycleStickyColor} title="Click to change color" className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-8 h-3.5 bg-white/60 hover:bg-white/90 backdrop-blur-md shadow-[0_1px_3px_rgba(0,0,0,0.15)] rounded-sm cursor-pointer transition-colors z-10" style={{ transform: 'rotate(2deg)' }} />
             
             {isEditingSticky ? (
@@ -434,7 +437,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
       )}
            
       {/* CENTERED MODAL PORTALS FOR MENUS */}
-      {isTagMenuOpen && mounted && typeof document !== 'undefined' && createPortal(
+      {isTagMenuOpen && canModify && mounted && typeof document !== 'undefined' && createPortal(
          <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={(e) => { e.stopPropagation(); setIsTagMenuOpen(false); }}>
              <motion.div 
                 initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 10 }} transition={{ duration: 0.15, ease: "easeOut" }} 
@@ -465,44 +468,48 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                             </button>
                          ))}
                       </div>
-                      <div className={`w-full h-px my-1.5 mx-auto ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
                       
-                      {/* UPGRADED: Added Pin Option to Main Menu */}
-                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTogglePin(item.id, item.is_pinned); setIsCardMenuOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
-                         <div className={`flex items-center gap-3 ${item.is_pinned ? 'text-teal-500' : 'text-zinc-600 dark:text-zinc-300'}`}>
-                            <Pin size={16} strokeWidth={2.5} className={item.is_pinned ? 'text-teal-500 fill-current' : 'text-zinc-400 dark:text-zinc-500'} /> 
-                            {item.is_pinned ? 'Unpin' : 'Pin'}
-                         </div>
-                      </button>
+                      {canModify && (
+                         <>
+                            <div className={`w-full h-px my-1.5 mx-auto ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
+                            
+                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onTogglePin(item.id, item.is_pinned); setIsCardMenuOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
+                               <div className={`flex items-center gap-3 ${item.is_pinned ? 'text-teal-500' : 'text-zinc-600 dark:text-zinc-300'}`}>
+                                  <Pin size={16} strokeWidth={2.5} className={item.is_pinned ? 'text-teal-500 fill-current' : 'text-zinc-400 dark:text-zinc-500'} /> 
+                                  {item.is_pinned ? 'Unpin' : 'Pin'}
+                               </div>
+                            </button>
 
-                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuView('folder'); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
-                         <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300"><Folder size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Folder</div>
-                         <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500"><span className="truncate max-w-20 font-medium text-xs">{item.section || item.sections?.[0] || 'None'}</span><ChevronRight size={14} /></div>
-                      </button>
-                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuView('list'); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
-                         <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300"><ListIcon size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> List</div>
-                         <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500"><span className="truncate max-w-20 font-medium text-xs">{item.list_name || 'None'}</span><ChevronRight size={14} /></div>
-                      </button>
-                      <div className={`w-full h-px my-1.5 mx-auto ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
-                      
-                      {!isStickyVisible ? (
-                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsStickyVisible(true); setIsEditingSticky(true); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><FileText size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Add Sticky Note</button>
-                      ) : (
-                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsStickyVisible(false); setStickyText(""); onUpdateSticky(item.id, ""); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><X size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Remove Sticky</button>
-                      )}
-                      
-                      {(currentCategoryType === 'folder' || currentCategoryType === 'list' || currentCategoryType === 'pinned' || currentCategoryType === 'type') && onRemoveFromContext && (
-                         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveFromContext(item.id); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors text-orange-500 hover:bg-orange-500/10 mt-0.5`}>
-                            <MinusCircle size={16} strokeWidth={2.5} className="text-orange-500" /> 
-                            {currentCategoryType === 'pinned' ? 'Unpin Item' : 
-                             currentCategoryType === 'list' ? 'Remove from list' : 
-                             `Remove from ${currentCategory}`}
-                         </button>
-                      )}
+                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuView('folder'); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
+                               <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300"><Folder size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Folder</div>
+                               <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500"><span className="truncate max-w-20 font-medium text-xs">{item.section || item.sections?.[0] || 'None'}</span><ChevronRight size={14} /></div>
+                            </button>
+                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuView('list'); }} className={`w-full flex items-center justify-between px-4 py-3.5 text-sm font-bold rounded-2xl transition-colors ${isDark ? 'hover:bg-white/5' : 'hover:bg-zinc-100'}`}>
+                               <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-300"><ListIcon size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> List</div>
+                               <div className="flex items-center gap-1.5 text-zinc-400 dark:text-zinc-500"><span className="truncate max-w-20 font-medium text-xs">{item.list_name || 'None'}</span><ChevronRight size={14} /></div>
+                            </button>
+                            <div className={`w-full h-px my-1.5 mx-auto ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
+                            
+                            {!isStickyVisible ? (
+                               <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsStickyVisible(true); setIsEditingSticky(true); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><FileText size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Add Sticky Note</button>
+                            ) : (
+                               <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setIsStickyVisible(false); setStickyText(""); onUpdateSticky(item.id, ""); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><X size={16} strokeWidth={2.5} className="text-zinc-400 dark:text-zinc-500" /> Remove Sticky</button>
+                            )}
+                            
+                            {(currentCategoryType === 'folder' || currentCategoryType === 'list' || currentCategoryType === 'pinned' || currentCategoryType === 'type') && onRemoveFromContext && (
+                               <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveFromContext(item.id); setIsCardMenuOpen(false); }} className={`w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 transition-colors text-orange-500 hover:bg-orange-500/10 mt-0.5`}>
+                                  <MinusCircle size={16} strokeWidth={2.5} className="text-orange-500" /> 
+                                  {currentCategoryType === 'pinned' ? 'Unpin Item' : 
+                                   currentCategoryType === 'list' ? 'Remove from list' : 
+                                   `Remove from ${currentCategory}`}
+                               </button>
+                            )}
 
-                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id); setIsCardMenuOpen(false); }} className="w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 hover:bg-red-500/10 text-red-500 transition-colors mt-0.5"><Trash2 size={16} strokeWidth={2.5} /> Delete Item</button>
+                            <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(item.id); setIsCardMenuOpen(false); }} className="w-full text-left px-4 py-3.5 text-sm font-bold rounded-2xl flex items-center gap-3 hover:bg-red-500/10 text-red-500 transition-colors mt-0.5"><Trash2 size={16} strokeWidth={2.5} /> Delete Item</button>
+                         </>
+                      )}
                    </>
-                ) : menuView === 'folder' ? (
+                ) : menuView === 'folder' && canModify ? (
                    <div className="flex flex-col max-h-64 overflow-y-auto custom-scrollbar p-1">
                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuView('main'); }} className="flex items-center gap-2 px-2 py-2.5 text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors mb-1"><ChevronLeft size={16} strokeWidth={2.5} /> Back</button>
                       <div className={`w-full h-px mb-1.5 ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
@@ -511,7 +518,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                          <button key={f} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onMoveToFolder(item.id, f); setIsCardMenuOpen(false); }} className={`flex items-center justify-between px-4 py-3 text-sm font-bold rounded-xl transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><span className="truncate">{f}</span> {(item.section === f || item.sections?.[0] === f) && <Check size={16} strokeWidth={3} className="text-teal-500 shrink-0" />}</button>
                       ))}
                    </div>
-                ) : (
+                ) : menuView === 'list' && canModify ? (
                    <div className="flex flex-col max-h-64 overflow-y-auto custom-scrollbar p-1">
                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuView('main'); }} className="flex items-center gap-2 px-2 py-2.5 text-xs font-bold uppercase tracking-widest text-zinc-400 hover:text-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-200 transition-colors mb-1"><ChevronLeft size={16} strokeWidth={2.5} /> Back</button>
                       <div className={`w-full h-px mb-1.5 ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
@@ -520,14 +527,14 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
                          <button key={l} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onMoveToList(item.id, l); setIsCardMenuOpen(false); }} className={`flex items-center justify-between px-4 py-3 text-sm font-bold rounded-xl transition-colors ${isDark ? 'hover:bg-white/5 text-zinc-300' : 'hover:bg-zinc-100 text-zinc-700'}`}><span className="truncate">{l}</span> {item.list_name === l && <Check size={16} strokeWidth={3} className="text-teal-500 shrink-0" />}</button>
                       ))}
                    </div>
-                )}
+                ) : null}
              </motion.div>
          </div>, document.body
       )}
 
       <div className={`flex flex-col w-full h-full relative z-0 ${isSelected ? 'opacity-80' : ''}`}>
 
-        {inTrash && !isSelectMode ? (
+        {inTrash && !isSelectMode && canModify ? (
           <div className="absolute inset-0 bg-black/60 backdrop-blur-md z-40 flex flex-col items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity gap-4 rounded-3xl duration-200">
             <button onClick={(e) => { e.stopPropagation(); onRestore(item.id); }} className="bg-white text-black px-6 py-3 rounded-full text-sm font-bold flex items-center gap-2 shadow-xl active:scale-95 transition-all duration-150"><RotateCcw size={16} strokeWidth={1.5}/> Restore</button>
             <button onClick={(e) => { e.stopPropagation(); onHardDelete(item.id); }} className="bg-red-50 text-red-600 px-6 py-3 rounded-full text-sm font-bold flex items-center gap-2 shadow-xl active:scale-95 transition-all duration-150"><Trash2 size={16} strokeWidth={1.5}/> Delete</button>
@@ -693,6 +700,7 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
 };
 
 export const MemoizedMasonryCard = memo(MemoizedMasonryCardComponent, (prevProps, nextProps) => {
+  // CRITICAL FIX: The component previously cached the teamRole so changing permissions didn't re-render the card
   return prevProps.isSelected === nextProps.isSelected &&
          prevProps.item === nextProps.item &&
          prevProps.viewMode === nextProps.viewMode &&
@@ -703,5 +711,7 @@ export const MemoizedMasonryCard = memo(MemoizedMasonryCardComponent, (prevProps
          prevProps.currentCategory === nextProps.currentCategory &&
          prevProps.currentCategoryType === nextProps.currentCategoryType &&
          prevProps.customFolders === nextProps.customFolders &&
-         prevProps.customLists === nextProps.customLists;
+         prevProps.customLists === nextProps.customLists &&
+         prevProps.teamRole === nextProps.teamRole &&             // Fixed memo check
+         prevProps.activeWorkspace === nextProps.activeWorkspace; // Fixed memo check
 });

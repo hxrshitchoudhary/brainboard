@@ -1,3 +1,4 @@
+// filepath: app/page.tsx
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback, useRef, startTransition } from "react";
@@ -1763,8 +1764,8 @@ export default function BrainboardBalanced() {
             <div className="relative group flex-1">
               <Search className={`absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 transition-colors ${theme.textMuted} group-focus-within:text-teal-500`} />
               <input type="text" placeholder="Search your mind..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`w-full py-3 pl-12 pr-12 text-sm font-medium outline-none transition-all rounded-2xl ${theme.input} leading-normal`} />
-              <div className={`absolute right-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-md border ${isDark ? 'bg-white/10 border-white/5 text-zinc-400' : 'bg-black/5 border-black/5 text-zinc-500'}`}>
-                  <CmdIcon size={12} /><span className="text-[10px] font-bold font-mono tracking-widest">K</span>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 hidden md:flex items-center gap-1 opacity-50">
+                  <CmdIcon size={12} /><span className="text-[10px] font-bold font-mono">K</span>
               </div>
             </div>
 
@@ -1822,25 +1823,27 @@ export default function BrainboardBalanced() {
             <AnimatePresence>
                {nav.workspace === "team" && (
                  <>
+                   {/* UPGRADED: Solid Team Chat button */}
                    <div className="relative group/tooltip hidden md:flex items-center justify-center">
-                      <button aria-label="Team Chat" onClick={() => updateUi({ isChatOpen: !ui.isChatOpen })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${ui.isChatOpen ? "bg-teal-500 text-white border border-teal-600" : (isDark ? "bg-[#18181B] border border-white/5 hover:bg-zinc-800" : "bg-white border border-black/5 hover:bg-black/5")}`}>
-                         <MessageSquare size={18} strokeWidth={ui.isChatOpen ? 2 : 1.5} className={ui.isChatOpen ? "text-white" : theme.textMuted} />
+                      <button aria-label="Team Chat" onClick={() => updateUi({ isChatOpen: !ui.isChatOpen })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${ui.isChatOpen ? "bg-teal-500 text-white border border-teal-600" : (isDark ? "bg-white/10 border border-white/5 hover:bg-white/20" : "bg-black/10 border border-black/5 hover:bg-black/20")}`}>
+                         <MessageSquare size={18} strokeWidth={ui.isChatOpen ? 2 : 1.5} className={ui.isChatOpen ? "text-white" : (isDark ? "text-white" : "text-black")} />
                       </button>
                       <div className="absolute top-full mt-2 px-2.5 py-1.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[10px] font-bold opacity-0 translate-y-2 group-hover/tooltip:opacity-100 group-hover/tooltip:translate-y-0 transition-all pointer-events-none whitespace-nowrap shadow-xl z-50 rounded-lg">
                           Team Chat
                       </div>
                    </div>
 
+                   {/* UPGRADED: Solid Notifications Menu */}
                    <div className="relative">
-                      <button aria-label="Notifications" onClick={() => updateUi({ showNotifications: !ui.showNotifications })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${isDark ? "bg-[#18181B] border border-white/5 hover:bg-zinc-800" : "bg-white border border-black/5 hover:bg-black/5"}`}>
-                         <Bell size={18} strokeWidth={1.5} className={theme.textMuted} />
+                      <button aria-label="Notifications" onClick={() => updateUi({ showNotifications: !ui.showNotifications })} className={`p-3 shadow-sm transition-all active:scale-95 rounded-xl ${isDark ? "bg-white/10 border border-white/5 hover:bg-white/20" : "bg-black/10 border border-black/5 hover:bg-black/20"}`}>
+                         <Bell size={18} strokeWidth={1.5} className={isDark ? "text-white" : "text-black"} />
                          {notifications.some(n => !n.read) && <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-[#18181B] dark:border-zinc-900" />}
                       </button>
                       <AnimatePresence>
                          {ui.showNotifications && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => updateUi({ showNotifications: false })} />
-                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ duration: 0.15 }} className={`absolute right-0 top-full mt-3 w-72 md:w-80 z-50 shadow-2xl border backdrop-blur-3xl p-2 rounded-3xl ${isDark ? "bg-zinc-900/95 border-zinc-800" : "bg-white/95 border-[#e8e4dc]"}`}>
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ duration: 0.15 }} className={`absolute right-0 top-full mt-3 w-72 md:w-80 z-50 shadow-2xl border p-2 rounded-3xl ${isDark ? "bg-[#18181B] border-white/10" : "bg-white border-stone-200"}`}>
                                  <div className="p-4 border-b border-black/5 dark:border-white/5 mb-2 flex items-center justify-between">
                                     <h4 className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>Notifications</h4>
                                     {notifications.some(n => !n.read) && (
@@ -1864,20 +1867,21 @@ export default function BrainboardBalanced() {
                       </AnimatePresence>
                    </div>
 
+                   {/* UPGRADED: Solid Team Presence Menu */}
                    <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="relative hidden md:block">
-                      <button aria-label="Team Presence" onClick={() => updateUi({ showTeamPresence: !ui.showTeamPresence })} className={`flex items-center p-1.5 shadow-md cursor-pointer active:scale-95 hover:shadow-lg transition-all border rounded-xl ${isDark ? "bg-[#18181B] border-white/5" : "bg-white border-black/5"}`}>
+                      <button aria-label="Team Presence" onClick={() => updateUi({ showTeamPresence: !ui.showTeamPresence })} className={`flex items-center p-1.5 shadow-md cursor-pointer active:scale-95 hover:shadow-lg transition-all border rounded-xl ${isDark ? "bg-white/10 border-white/5 hover:bg-white/20" : "bg-black/10 border-black/5 hover:bg-black/20"}`}>
                         <div className="flex -space-x-2 pl-1.5">
                           {teamMembers.filter(m => m.inWorkspace).slice(0, 3).map((member, i) => (
-                             <img key={i} className={`inline-block h-8 w-8 rounded-full ring-2 object-cover ${isDark ? "ring-[#18181B]" : "ring-white"}`} src={member.avatar} alt=""/>
+                             <img key={i} className={`inline-block h-8 w-8 rounded-full ring-2 object-cover ${isDark ? "ring-zinc-800" : "ring-stone-200"}`} src={member.avatar} alt=""/>
                           ))}
                         </div>
-                        <div className="px-4 flex items-center gap-1.5 text-xs font-bold text-stone-500 uppercase tracking-widest"><Users size={14} strokeWidth={2}/> Team</div>
+                        <div className={`px-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${isDark ? "text-white" : "text-black"}`}><Users size={14} strokeWidth={2}/> Team</div>
                       </button>
                       <AnimatePresence>
                          {ui.showTeamPresence && (
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => updateUi({ showTeamPresence: false })} />
-                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ duration: 0.15 }} className={`absolute right-0 top-full mt-3 w-80 z-50 shadow-2xl border backdrop-blur-3xl flex flex-col overflow-hidden rounded-3xl ${isDark ? "bg-zinc-900/95 border-zinc-800" : "bg-white/95 border-[#e8e4dc]"}`}>
+                              <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ duration: 0.15 }} className={`absolute right-0 top-full mt-3 w-80 z-50 shadow-2xl border flex flex-col overflow-hidden rounded-3xl ${isDark ? "bg-[#18181B] border-white/10" : "bg-white border-stone-200"}`}>
                                  <div className="flex flex-col gap-1 max-h-80 overflow-y-auto p-2">
                                     
                                     <div className="px-3 pt-3 pb-2">
