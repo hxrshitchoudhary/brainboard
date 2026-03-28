@@ -17,7 +17,7 @@ import {
   FileText, Globe, Compass, ChevronRight, UploadCloud, 
   List as ListIcon, Calendar as CalendarIcon, ChevronLeft, ChevronRight as ChevronRightIcon, 
   Users, CheckCircle, MessageSquare, AlignJustify, Monitor, CheckSquare, Columns,
-  Bell, Circle, RotateCcw, X, Hash, Command as CmdIcon, MinusCircle
+  Bell, Circle, RotateCcw, X, Hash, Command as CmdIcon, MinusCircle, Lock
 } from "lucide-react";
 
 // --- TYPES & STORE ---
@@ -59,8 +59,6 @@ export default function BrainboardBalanced() {
   const [mentionQuery, setMentionQuery] = useState<{ active: boolean, query: string, target: "note" | "chat" }>({ active: false, query: "", target: "note" });
   const [chatInput, setChatInput] = useState("");
   
-  const [folderOrder, setFolderOrder] = useState<string[]>([]);
-  const [listOrder, setListOrder] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   
@@ -87,6 +85,11 @@ export default function BrainboardBalanced() {
   const rafRef = useRef<number | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null); 
 
+  // Team Access State
+  const [isTeamUnlocked, setIsTeamUnlocked] = useState(false);
+  const [teamPasscode, setTeamPasscode] = useState("");
+  const [passcodeError, setPasscodeError] = useState(false);
+
   useEffect(() => {
      setSelectedItems(new Set());
      setLastSelected(null);
@@ -110,7 +113,11 @@ export default function BrainboardBalanced() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const {
-    items, setItems, customFolders, setCustomFolders, customLists, setCustomLists,
+    items, setItems, 
+    personalFolders, setPersonalFolders, 
+    teamFolders, setTeamFolders, 
+    personalLists, setPersonalLists, 
+    teamLists, setTeamLists,
     isLoading, page, setPage, hasMore, fetchItems, saveNote, insertItem, updateItemTags, moveItemToFolder, moveItemToList, updateStickyNote, toggleItemReaction, toggleChecklistItem,
     moveToTrash, restoreFromTrash, hardDelete, emptyTrash, renameFolder, deleteFolder, renameList, deleteList,
     bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete,
@@ -122,11 +129,29 @@ export default function BrainboardBalanced() {
     fetchProfilesAndRole, handleUpdateMemberRole, handleMarkAsRead, handleMarkAllAsRead
   } = useTeamSpace(session, teamWorkspaceId, ui.isChatOpen, nav.workspace, showToast, setItems, updateUi, chatScrollRef);
 
-  const activeStateRef = useRef({ category: nav.category, type: nav.categoryType, folders: customFolders, workspace: nav.workspace, userName: profile.displayName, role: teamRole });
+  // Derived Dynamic Collections based on Workspace Context
+  const activeFolders = nav.workspace === "team" ? teamFolders : personalFolders;
+  const setActiveFolders = nav.workspace === "team" ? setTeamFolders : setPersonalFolders;
+  
+  const activeLists = nav.workspace === "team" ? teamLists : personalLists;
+  const setActiveLists = nav.workspace === "team" ? setTeamLists : setPersonalLists;
+
+  // Folder/List Custom Orders
+  const [personalFolderOrder, setPersonalFolderOrder] = useState<string[]>([]);
+  const [teamFolderOrder, setTeamFolderOrder] = useState<string[]>([]);
+  const [personalListOrder, setPersonalListOrder] = useState<string[]>([]);
+  const [teamListOrder, setTeamListOrder] = useState<string[]>([]);
+
+  const activeFolderOrder = nav.workspace === "team" ? teamFolderOrder : personalFolderOrder;
+  const setActiveFolderOrder = nav.workspace === "team" ? setTeamFolderOrder : setPersonalFolderOrder;
+  const activeListOrder = nav.workspace === "team" ? teamListOrder : personalListOrder;
+  const setActiveListOrder = nav.workspace === "team" ? setTeamListOrder : setPersonalListOrder;
+
+  const activeStateRef = useRef({ category: nav.category, type: nav.categoryType, folders: activeFolders, workspace: nav.workspace, userName: profile.displayName, role: teamRole });
   
   useEffect(() => {
-    activeStateRef.current = { category: nav.category, type: nav.categoryType, folders: customFolders, workspace: nav.workspace, userName: profile.displayName, role: teamRole };
-  }, [nav.category, nav.categoryType, customFolders, nav.workspace, profile.displayName, teamRole]);
+    activeStateRef.current = { category: nav.category, type: nav.categoryType, folders: activeFolders, workspace: nav.workspace, userName: profile.displayName, role: teamRole };
+  }, [nav.category, nav.categoryType, activeFolders, nav.workspace, profile.displayName, teamRole]);
 
   const loadMoreRef = useCallback((node: HTMLDivElement | null) => {
       if (isLoading) return;
@@ -179,7 +204,6 @@ export default function BrainboardBalanced() {
     if (debouncedSearchQuery) {
       const q = debouncedSearchQuery.toLowerCase();
       
-      // Smart Filtering Logic (e.g., type:image, folder:Work)
       const typeMatch = q.match(/type:(\w+)/);
       const folderMatch = q.match(/folder:(\w+)/);
       
@@ -194,7 +218,6 @@ export default function BrainboardBalanced() {
          currentResult = currentResult.filter(item => item.sections?.some((s: string) => s.toLowerCase().includes(folder)) || item.section?.toLowerCase().includes(folder));
       }
       
-      // Clean up the query string to execute a standard text search on the remaining words
       const cleanQ = q.replace(/type:\w+/g, '').replace(/folder:\w+/g, '').trim();
       
       if (cleanQ) {
@@ -204,7 +227,6 @@ export default function BrainboardBalanced() {
     }
     
     return result.sort((a, b) => {
-      // 1. Optimistic UI first - keeps newly created files pinned at top initially
       const aRecentIdx = recentIds.indexOf(a.id);
       const bRecentIdx = recentIds.indexOf(b.id);
       
@@ -215,7 +237,6 @@ export default function BrainboardBalanced() {
       if (!aIsRecent && bIsRecent) return 1;
       if (aIsRecent && bIsRecent) return aRecentIdx - bRecentIdx;
       
-      // 2. Strict chronological fallback - ensures items stay at top when optimistic UI clears
       const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
       const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
       
@@ -436,42 +457,72 @@ export default function BrainboardBalanced() {
       }
   }, [activeIndex, filteredData]);
 
+  // Load configuration from local storage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedTheme = localStorage.getItem("brainboard-theme");
       if (storedTheme) setIsDark(storedTheme === "dark");
       else setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-      const savedFolders = localStorage.getItem("bb-folder-order");
-      const savedLists = localStorage.getItem("bb-list-order");
-      if (savedFolders) setFolderOrder(JSON.parse(savedFolders));
-      if (savedLists) setListOrder(JSON.parse(savedLists));
+      if (localStorage.getItem("bb-team-unlocked") === "true") {
+          setIsTeamUnlocked(true);
+      }
+
+      const pFolders = localStorage.getItem("bb-personal-folder-order");
+      const tFolders = localStorage.getItem("bb-team-folder-order");
+      const pLists = localStorage.getItem("bb-personal-list-order");
+      const tLists = localStorage.getItem("bb-team-list-order");
+
+      if (pFolders) setPersonalFolderOrder(JSON.parse(pFolders));
+      if (tFolders) setTeamFolderOrder(JSON.parse(tFolders));
+      if (pLists) setPersonalListOrder(JSON.parse(pLists));
+      if (tLists) setTeamListOrder(JSON.parse(tLists));
     }
   }, []);
 
+  // Sync personal folders order to localStorage
   useEffect(() => {
-    setFolderOrder(prev => {
+    setPersonalFolderOrder(prev => {
         let updated = [...prev]; 
-        customFolders.forEach(f => { 
-            if (!updated.includes(f)) updated.push(f); 
-        });
-        updated = updated.filter(f => customFolders.includes(f)); 
-        localStorage.setItem("bb-folder-order", JSON.stringify(updated)); 
+        personalFolders.forEach(f => { if (!updated.includes(f)) updated.push(f); });
+        updated = updated.filter(f => personalFolders.includes(f)); 
+        localStorage.setItem("bb-personal-folder-order", JSON.stringify(updated)); 
         return updated;
     });
-  }, [customFolders]);
+  }, [personalFolders]);
 
+  // Sync team folders order to localStorage
   useEffect(() => {
-    setListOrder(prev => {
+    setTeamFolderOrder(prev => {
         let updated = [...prev]; 
-        customLists.forEach(l => { 
-            if (!updated.includes(l)) updated.push(l); 
-        });
-        updated = updated.filter(l => customLists.includes(l)); 
-        localStorage.setItem("bb-list-order", JSON.stringify(updated)); 
+        teamFolders.forEach(f => { if (!updated.includes(f)) updated.push(f); });
+        updated = updated.filter(f => teamFolders.includes(f)); 
+        localStorage.setItem("bb-team-folder-order", JSON.stringify(updated)); 
         return updated;
     });
-  }, [customLists]);
+  }, [teamFolders]);
+
+  // Sync personal lists order to localStorage
+  useEffect(() => {
+    setPersonalListOrder(prev => {
+        let updated = [...prev]; 
+        personalLists.forEach(l => { if (!updated.includes(l)) updated.push(l); });
+        updated = updated.filter(l => personalLists.includes(l)); 
+        localStorage.setItem("bb-personal-list-order", JSON.stringify(updated)); 
+        return updated;
+    });
+  }, [personalLists]);
+
+  // Sync team lists order to localStorage
+  useEffect(() => {
+    setTeamListOrder(prev => {
+        let updated = [...prev]; 
+        teamLists.forEach(l => { if (!updated.includes(l)) updated.push(l); });
+        updated = updated.filter(l => teamLists.includes(l)); 
+        localStorage.setItem("bb-team-list-order", JSON.stringify(updated)); 
+        return updated;
+    });
+  }, [teamLists]);
 
   const toggleTheme = () => {
     const nextTheme = !isDark; 
@@ -966,7 +1017,6 @@ export default function BrainboardBalanced() {
          const tempId = `temp-${Date.now()}`;
          const localCreationTime = new Date().toISOString(); 
          
-         // 1. Assign `clientKey` to prevent Framer Motion from destroying/respawning the component when DB updates it
          let newItem: BentoItem = {
              id: tempId, 
              clientKey: tempId, 
@@ -986,10 +1036,12 @@ export default function BrainboardBalanced() {
          setItems(prev => [newItem, ...prev]);
 
          if (isReel && !folders.includes("Instagram")) {
-             setCustomFolders(p => [...new Set([...p, "Instagram"])]);
+             if (workspace === "team") setTeamFolders(p => [...new Set([...p, "Instagram"])]);
+             else setPersonalFolders(p => [...new Set([...p, "Instagram"])]);
          }
          if (isYouTube && !folders.includes("YouTube")) {
-             setCustomFolders(p => [...new Set([...p, "YouTube"])]);
+             if (workspace === "team") setTeamFolders(p => [...new Set([...p, "YouTube"])]);
+             else setPersonalFolders(p => [...new Set([...p, "YouTube"])]);
          }
 
          try {
@@ -1043,7 +1095,6 @@ export default function BrainboardBalanced() {
              const { data: dbData, error } = await supabase.from("assets").insert([dbPayload]).select().single();
              
              if (dbData) {
-                 // 2. Transfer the `clientKey` to the Database object so the React Key NEVER changes on screen
                  setItems(prev => prev.map(i => i.id === tempId ? { ...dbData, clientKey: tempId } : i));
                  setRecentIds(prev => prev.map(id => id === tempId ? dbData.id : id));
                  showToast(isReel ? "Reel captured!" : isYouTube ? "YouTube saved!" : "Link saved!");
@@ -1066,7 +1117,6 @@ export default function BrainboardBalanced() {
              };
              const { data: dbData } = await supabase.from("assets").insert([fallbackPayload]).select().single();
              if (dbData) {
-                 // Transfer `clientKey` on fallback as well
                  setItems(prev => prev.map(i => i.id === tempId ? { ...dbData, clientKey: tempId } : i));
                  setRecentIds(prev => prev.map(id => id === tempId ? dbData.id : id));
              } else {
@@ -1080,7 +1130,7 @@ export default function BrainboardBalanced() {
     };
     window.addEventListener("paste", handleGlobalPaste);
     return () => window.removeEventListener("paste", handleGlobalPaste);
-  }, [session, teamWorkspaceId, updateUi, setItems, setRecentIds, setCustomFolders, showToast]);
+  }, [session, teamWorkspaceId, updateUi, setItems, setRecentIds, setPersonalFolders, setTeamFolders, showToast]);
 
   const monthStart = startOfMonth(nav.currentDate);
   const monthEnd = endOfMonth(monthStart);
@@ -1108,11 +1158,9 @@ export default function BrainboardBalanced() {
       return (
         <div className={`relative min-h-screen w-full bg-[#050505] text-white overflow-hidden selection:bg-teal-500/30 flex flex-col ${inter.className}`}>
           
-          {/* Animated Background Gradients & Grid */}
           <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-teal-600/20 blur-[120px] pointer-events-none mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
           <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-600/20 blur-[120px] pointer-events-none mix-blend-screen animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }} />
           
-          {/* Beautifully faded masking on the background grid */}
           <div 
              className="absolute inset-0 opacity-[0.03] pointer-events-none" 
              style={{ 
@@ -1123,7 +1171,6 @@ export default function BrainboardBalanced() {
              }} 
           />
 
-          {/* Navigation */}
           <nav className="relative z-50 w-full flex justify-between items-center px-6 md:px-12 py-6">
             <div className="font-black text-xl tracking-tighter flex items-center gap-3">
               <div className="w-8 h-8 bg-linear-to-br from-teal-400 to-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-500/20">
@@ -1136,12 +1183,9 @@ export default function BrainboardBalanced() {
             </button>
           </nav>
 
-          {/* Main Hero */}
           <main className="relative z-20 flex-1 flex flex-col items-center justify-center text-center px-6 w-full max-w-6xl mx-auto pb-20">
             
-            {/* Floating Mockup Cards (Background) */}
             <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden flex justify-center items-center opacity-30 md:opacity-60">
-               {/* Card 1 - Top Left */}
                <motion.div animate={{ y: [0, -20, 0], rotate: [-2, 0, -2] }} transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }} className="absolute top-[10%] left-[5%] md:left-[10%] w-56 h-72 bg-[#111113] border border-white/10 rounded-3xl shadow-2xl p-4 hidden md:flex flex-col gap-3">
                   <div className="w-full h-32 bg-linear-to-br from-teal-500/20 to-emerald-500/5 rounded-xl border border-white/5"></div>
                   <div className="w-3/4 h-3 bg-white/20 rounded-full mt-2"></div>
@@ -1151,7 +1195,6 @@ export default function BrainboardBalanced() {
                      <div className="w-16 h-6 rounded-full bg-white/5"></div>
                   </div>
                </motion.div>
-               {/* Card 2 - Bottom Right */}
                <motion.div animate={{ y: [0, 20, 0], rotate: [2, 4, 2] }} transition={{ repeat: Infinity, duration: 7, ease: "easeInOut" }} className="absolute bottom-[15%] right-[5%] md:right-[10%] w-64 h-56 bg-[#111113] border border-white/10 rounded-3xl shadow-2xl p-4 hidden md:flex flex-col gap-3">
                   <div className="w-full h-10 bg-white/5 rounded-xl border border-white/5 flex items-center px-3 gap-2">
                      <div className="w-4 h-4 rounded-full bg-emerald-500/40"></div>
@@ -1165,7 +1208,6 @@ export default function BrainboardBalanced() {
                       <div className="w-4 h-4 rounded-full bg-white/10"></div>
                   </div>
                </motion.div>
-               {/* Card 3 - Top Right */}
                <motion.div animate={{ y: [0, -15, 0], rotate: [5, 2, 5] }} transition={{ repeat: Infinity, duration: 5, ease: "easeInOut" }} className="absolute top-[20%] right-[15%] w-40 h-40 bg-[#111113] border border-white/10 rounded-3xl shadow-2xl p-5 hidden lg:flex flex-col items-center justify-center gap-3">
                   <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
                       <ImageIcon size={20} className="text-blue-400" />
@@ -1175,7 +1217,6 @@ export default function BrainboardBalanced() {
                </motion.div>
             </div>
 
-            {/* Content Foreground */}
             <div className="relative z-10 flex flex-col items-center -mt-10">
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
@@ -1216,7 +1257,6 @@ export default function BrainboardBalanced() {
                       onClick={handleGoogleLogin} 
                       className="group relative flex items-center justify-center gap-3 bg-white text-black px-8 py-4 rounded-full text-base font-bold transition-all hover:scale-105 active:scale-95 shadow-[0_0_40px_rgba(20,184,166,0.3)] hover:shadow-[0_0_60px_rgba(20,184,166,0.5)] overflow-hidden"
                   >
-                      {/* Shine effect on hover */}
                       <div className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-linear-to-r from-transparent via-white/40 to-transparent pointer-events-none" />
                       
                       <svg className="w-5 h-5 mr-1" viewBox="0 0 24 24">
@@ -1541,10 +1581,9 @@ export default function BrainboardBalanced() {
                </div>
             </div>
 
-            {/* Folders Moved Under Content */}
             <div>
                <div className="flex items-center justify-between px-3 mb-2 group">
-                 <h4 className={`text-xs font-extrabold uppercase tracking-widest ${theme.textMuted} opacity-70`}>Folders</h4>
+                 <h4 className={`text-xs font-extrabold uppercase tracking-widest ${theme.textMuted} opacity-70`}>{nav.workspace === "team" ? "Team Folders" : "My Folders"}</h4>
                  {canModifyStructure && (
                      <button aria-label="Create Folder" onClick={() => updateSidebar({ isCreatingFolder: true })} className={`opacity-0 group-hover:opacity-100 transition-opacity ${theme.textMuted} hover:${theme.text}`}>
                          <Plus size={14} strokeWidth={1.5}/>
@@ -1561,11 +1600,11 @@ export default function BrainboardBalanced() {
                           value={sidebar.newFolderName} 
                           onChange={e => updateSidebar({ newFolderName: e.target.value })} 
                           onKeyDown={e => { 
-                              if (e.key === "Enter") { setCustomFolders(p => [...p, sidebar.newFolderName]); updateSidebar({ isCreatingFolder: false, newFolderName: "" }); } 
+                              if (e.key === "Enter") { setActiveFolders(p => [...p, sidebar.newFolderName]); updateSidebar({ isCreatingFolder: false, newFolderName: "" }); } 
                               if (e.key === "Escape") updateSidebar({ isCreatingFolder: false }); 
                           }} 
                           onBlur={() => { 
-                              if (sidebar.newFolderName) setCustomFolders(p => [...p, sidebar.newFolderName]); 
+                              if (sidebar.newFolderName) setActiveFolders(p => [...p, sidebar.newFolderName]); 
                               updateSidebar({ isCreatingFolder: false, newFolderName: "" }); 
                           }} 
                           className={`bg-transparent border-none outline-none text-sm font-bold w-full ${theme.text}`} 
@@ -1573,7 +1612,7 @@ export default function BrainboardBalanced() {
                       />
                     </motion.div>
                   )}
-                  {folderOrder.map((folder, index) => (
+                  {activeFolderOrder.map((folder, index) => (
                      <SidebarEditableItem 
                          key={folder} 
                          icon={<Folder size={16} strokeWidth={1.5}/>} 
@@ -1585,8 +1624,8 @@ export default function BrainboardBalanced() {
                          onClick={() => updateNav({ categoryType: "folder", category: folder })} 
                          onRename={(oldN: string, newN: string) => handleRenameFolder(oldN, newN)} 
                          onDelete={() => handleDeleteFolder(folder)} 
-                         onMoveUp={() => setFolderOrder(prev => moveArrayItem(prev, index, -1))} 
-                         onMoveDown={() => setFolderOrder(prev => moveArrayItem(prev, index, 1))} 
+                         onMoveUp={() => setActiveFolderOrder(prev => moveArrayItem(prev, index, -1))} 
+                         onMoveDown={() => setActiveFolderOrder(prev => moveArrayItem(prev, index, 1))} 
                          onDropItem={(itemId: string | number) => moveItemToFolder(itemId, folder)} 
                          onDropItems={(itemIds: (string | number)[]) => { bulkMoveToFolder(itemIds, folder); setSelectedItems(new Set()); }}
                          onDropFiles={(files: File[]) => processAndUploadFiles(files, folder)}
@@ -1597,7 +1636,7 @@ export default function BrainboardBalanced() {
 
             <div>
                <div className="flex items-center justify-between px-3 mb-2 group">
-                 <h4 className={`text-xs font-extrabold uppercase tracking-widest ${theme.textMuted} opacity-70`}>My Lists</h4>
+                 <h4 className={`text-xs font-extrabold uppercase tracking-widest ${theme.textMuted} opacity-70`}>{nav.workspace === "team" ? "Team Lists" : "My Lists"}</h4>
                  {canModifyStructure && (
                      <button aria-label="Create List" onClick={() => updateSidebar({ isCreatingList: true })} className={`opacity-0 group-hover:opacity-100 transition-opacity ${theme.textMuted} hover:${theme.text}`}>
                          <Plus size={14} strokeWidth={1.5}/>
@@ -1614,11 +1653,11 @@ export default function BrainboardBalanced() {
                           value={sidebar.newListName} 
                           onChange={e => updateSidebar({ newListName: e.target.value })} 
                           onKeyDown={e => { 
-                              if (e.key === "Enter") { setCustomLists(p => [...p, sidebar.newListName]); updateSidebar({ isCreatingList: false, newListName: "" }); } 
+                              if (e.key === "Enter") { setActiveLists(p => [...p, sidebar.newListName]); updateSidebar({ isCreatingList: false, newListName: "" }); } 
                               if (e.key === "Escape") updateSidebar({ isCreatingList: false }); 
                           }} 
                           onBlur={() => { 
-                              if (sidebar.newListName) setCustomLists(p => [...p, sidebar.newListName]); 
+                              if (sidebar.newListName) setActiveLists(p => [...p, sidebar.newListName]); 
                               updateSidebar({ isCreatingList: false, newListName: "" }); 
                           }} 
                           className={`bg-transparent border-none outline-none text-sm font-bold w-full ${theme.text}`} 
@@ -1626,7 +1665,7 @@ export default function BrainboardBalanced() {
                       />
                     </motion.div>
                   )}
-                  {listOrder.map((list, index) => (
+                  {activeListOrder.map((list, index) => (
                      <SidebarEditableItem 
                          key={list} 
                          icon={<ListIcon size={16} strokeWidth={1.5}/>} 
@@ -1638,8 +1677,8 @@ export default function BrainboardBalanced() {
                          onClick={() => updateNav({ categoryType: "list", category: list })} 
                          onRename={(oldN: string, newN: string) => handleRenameList(oldN, newN)} 
                          onDelete={() => handleDeleteList(list)} 
-                         onMoveUp={() => setListOrder(prev => moveArrayItem(prev, index, -1))} 
-                         onMoveDown={() => setListOrder(prev => moveArrayItem(prev, index, 1))} 
+                         onMoveUp={() => setActiveListOrder(prev => moveArrayItem(prev, index, -1))} 
+                         onMoveDown={() => setActiveListOrder(prev => moveArrayItem(prev, index, 1))} 
                          onDropItem={(itemId: string | number) => moveItemToList(itemId, list)} 
                          onDropItems={(itemIds: (string | number)[]) => { bulkMoveToList(itemIds, list); setSelectedItems(new Set()); }}
                      />
@@ -1740,7 +1779,7 @@ export default function BrainboardBalanced() {
                          <div className="relative group">
                             <select defaultValue="" onChange={(e) => { bulkMoveToFolder(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
                                <option value="" disabled>Folder</option>
-                               {customFolders.map((f: string) => <option key={f} value={f}>{f}</option>)}
+                               {activeFolders.map((f: string) => <option key={f} value={f}>{f}</option>)}
                             </select>
                             <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300' : 'hover:bg-stone-100 text-zinc-700'}`}>
                                 <Folder size={14} className={isDark ? "text-zinc-400" : "text-stone-500"} /> <span className="hidden sm:inline">Move</span>
@@ -1749,7 +1788,7 @@ export default function BrainboardBalanced() {
                          <div className="relative group">
                             <select defaultValue="" onChange={(e) => { bulkMoveToList(Array.from(selectedItems), e.target.value); setSelectedItems(new Set()); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
                                <option value="" disabled>List</option>
-                               {customLists.map((l: string) => <option key={l} value={l}>{l}</option>)}
+                               {activeLists.map((l: string) => <option key={l} value={l}>{l}</option>)}
                             </select>
                             <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isDark ? 'hover:bg-white/10 text-zinc-300' : 'hover:bg-stone-100 text-zinc-700'}`}>
                                 <ListIcon size={14} className={isDark ? "text-zinc-400" : "text-stone-500"} /> <span className="hidden sm:inline">Add to List</span>
@@ -1794,7 +1833,6 @@ export default function BrainboardBalanced() {
           )}
         </AnimatePresence>
 
-        {/* 検 UPGRADE: Dynamic Frost Sticky Header */}
         <header className={`sticky top-0 w-full px-6 md:px-12 pt-6 pb-4 shrink-0 flex items-center justify-between gap-6 z-50 transition-all duration-300 ${isDark ? 'bg-[#0E0E10]/80 border-b border-white/5 backdrop-blur-2xl' : 'bg-white/80 border-b border-black/5 backdrop-blur-2xl'}`}>
           <div className="flex-1 max-w-2xl flex items-center gap-4">
             
@@ -1858,9 +1896,8 @@ export default function BrainboardBalanced() {
             <ThemeToggle isDark={isDark} toggle={toggleTheme} />
 
             <AnimatePresence>
-               {nav.workspace === "team" && (
+               {nav.workspace === "team" && isTeamUnlocked && (
                  <>
-                   {/* UPGRADED: Solid Team Chat button */}
                    <div className="relative group/tooltip hidden md:flex items-center justify-center">
                       <button aria-label="Team Chat" onClick={() => updateUi({ isChatOpen: !ui.isChatOpen })} className={`p-3 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all active:scale-95 border rounded-2xl ${ui.isChatOpen ? "bg-teal-500 text-white border-teal-600" : (isDark ? "bg-[#18181B] border-white/5 hover:bg-white/10" : "bg-white border-stone-200 hover:bg-stone-50")}`}>
                          <MessageSquare size={20} strokeWidth={ui.isChatOpen ? 2.5 : 2} className={ui.isChatOpen ? "text-white" : (isDark ? "text-white" : "text-black")} />
@@ -1870,7 +1907,6 @@ export default function BrainboardBalanced() {
                       </div>
                    </div>
 
-                   {/* UPGRADED: Solid Notifications Menu */}
                    <div className="relative">
                       <button aria-label="Notifications" onClick={() => updateUi({ showNotifications: !ui.showNotifications })} className={`p-3 shadow-[0_2px_8px_rgba(0,0,0,0.04)] transition-all active:scale-95 border rounded-2xl relative ${isDark ? "bg-[#18181B] border-white/5 hover:bg-white/10" : "bg-white border-stone-200 hover:bg-stone-50"}`}>
                          <Bell size={20} strokeWidth={2} className={isDark ? "text-white" : "text-black"} />
@@ -1904,7 +1940,6 @@ export default function BrainboardBalanced() {
                       </AnimatePresence>
                    </div>
 
-                   {/* UPGRADED: Solid Team Presence Menu */}
                    <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }} className="relative hidden md:block">
                       <button aria-label="Team Presence" onClick={() => updateUi({ showTeamPresence: !ui.showTeamPresence })} className={`flex items-center p-1 shadow-[0_2px_8px_rgba(0,0,0,0.04)] cursor-pointer active:scale-95 transition-all border rounded-2xl ${isDark ? "bg-[#18181B] border-white/5 hover:bg-white/10" : "bg-white border-stone-200 hover:bg-stone-50"}`}>
                         <div className="flex -space-x-2 pl-1">
@@ -1974,7 +2009,7 @@ export default function BrainboardBalanced() {
               </button>
             ) : (
               <div className="flex gap-3">
-                {canCreate && (
+                {canCreate && (nav.workspace === "personal" || isTeamUnlocked) && (
                    <div className="relative group/tooltip flex items-center justify-center z-50">
                       <button aria-label="Create Menu" onClick={() => setShowCreateMenu(!showCreateMenu)} className={`h-11 px-6 text-sm font-bold flex items-center gap-2 rounded-2xl transition-all shadow-[0_2px_8px_rgba(20,184,166,0.25)] active:scale-95 ${theme.btnPrimary}`}>
                          <Plus size={18} strokeWidth={2.5} className={showCreateMenu ? "rotate-45 transition-transform" : "transition-transform"} /> <span className="hidden md:inline">Create</span>
@@ -2011,256 +2046,298 @@ export default function BrainboardBalanced() {
           </div>
         </header>
 
-        <div className="px-6 md:px-12 pb-4 pt-4 flex flex-col relative z-30 bg-transparent shrink-0">
-           <div className="flex items-end justify-between">
-             {nav.viewMode === "grid" || nav.viewMode === "card" || nav.viewMode === "list" ? (
-                <>
-                 <div>
-                   <h2 className="text-4xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">
-                     {getCategoryTitle()}
-                   </h2>
-                   <p className={`mt-2 text-xs font-bold flex items-center gap-2 uppercase tracking-widest opacity-80 ${theme.textMuted}`}>
-                      {filteredData.length} {filteredData.length === 1 ? 'item' : 'items'} curated
-                   </p>
-                 </div>
-                </>
-             ) : (
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
-                  <h2 className="text-3xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">{format(nav.currentDate, "MMMM yyyy")}</h2>
-                  <div className={`flex items-center gap-1 border p-1 shadow-[0_2px_8px_rgba(0,0,0,0.04)] backdrop-blur-md rounded-2xl ${isDark ? "bg-zinc-900/50 border-zinc-800/80" : "bg-white border-stone-200"}`}>
-                     <button aria-label="Previous Month" onClick={() => updateNav({ currentDate: subMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-xl ${isDark ? "hover:bg-zinc-800 text-zinc-100" : "hover:bg-stone-100 text-stone-900"}`}>
-                         <ChevronLeft size={18} strokeWidth={1.5}/>
-                     </button>
-                     <button onClick={() => updateNav({ currentDate: new Date() })} className={`px-5 py-2 text-sm font-bold transition-colors active:scale-95 rounded-xl ${isDark ? "hover:bg-zinc-800 text-zinc-400" : "hover:bg-stone-100 text-stone-500"}`}>
-                         Today
-                     </button>
-                     <button aria-label="Next Month" onClick={() => updateNav({ currentDate: addMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-xl ${isDark ? "hover:bg-zinc-800 text-zinc-100" : "hover:bg-stone-100 text-stone-900"}`}>
-                         <ChevronRightIcon size={18} strokeWidth={1.5}/>
-                     </button>
-                  </div>
-                </div>
-             )}
-           </div>
-
-           <AnimatePresence>
-              {((nav.categoryType as any) === "hashtags" || nav.categoryType === "tag") && (
-                 <motion.div 
-                    initial={{ opacity: 0, height: 0 }} 
-                    animate={{ opacity: 1, height: "auto" }} 
-                    exit={{ opacity: 0, height: 0 }}
-                    className={`flex flex-col gap-4 mt-6 pt-4 border-t w-full relative z-30 ${isDark ? "border-white/5" : "border-black/5"}`}
-                 >
-                    <div className={`relative flex items-center w-full max-w-md overflow-hidden border focus-within:border-teal-500 transition-colors shadow-[0_2px_8px_rgba(0,0,0,0.04)] rounded-2xl ${isDark ? "bg-[#18181B] border-white/5" : "bg-white border-stone-200"}`}>
-                       <Search size={16} className={`absolute left-4 ${theme.textMuted}`} />
-                       <input type="text" placeholder="Search tags..." value={tagSearchQuery} onChange={e => setTagSearchQuery(e.target.value)} className={`w-full bg-transparent border-none py-3 pl-11 pr-4 text-sm font-medium outline-none ${theme.text}`} />
+        {nav.workspace === "team" && !isTeamUnlocked ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 relative z-10 w-full overflow-y-auto">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`max-w-md w-full p-8 rounded-3xl border shadow-2xl text-center ${isDark ? "bg-[#18181B] border-white/10" : "bg-white border-stone-200"}`}
+                >
+                    <div className="w-16 h-16 mx-auto bg-teal-500/10 rounded-full flex items-center justify-center mb-6">
+                        <Lock size={28} className="text-teal-500" />
                     </div>
-                    
-                    <div className="w-full flex flex-wrap gap-2 pt-1 pb-2">
-                       <button onClick={() => updateNav({ categoryType: "hashtags" as any, category: "All" })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-2xl ${(nav.categoryType as any) === "hashtags" ? "bg-teal-500 text-white border-teal-600 shadow-md" : (isDark ? "bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10" : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50")}`}>
-                           All Hashtags
-                       </button>
-                       {smartTags.filter((t: string) => t.toLowerCase().includes(tagSearchQuery.toLowerCase())).map((tag: string) => (
-                          <button key={tag} onClick={() => updateNav({ categoryType: "tag", category: tag })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-2xl ${nav.categoryType === "tag" && nav.category === tag ? "bg-teal-500 text-white border-teal-600 shadow-md" : (isDark ? "bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10" : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50")}`}>
-                              #{tag}
-                          </button>
-                       ))}
-                    </div>
-                 </motion.div>
-              )}
-           </AnimatePresence>
-        </div>
+                    <h2 className="text-2xl font-black tracking-tight mb-2">Team Access Required</h2>
+                    <p className={`text-sm mb-8 ${theme.textMuted}`}>Enter the secret team code to access this shared workspace.</p>
 
-        <div 
-           className="flex-1 overflow-y-auto px-6 md:px-12 pt-6 pb-24 md:pb-20 custom-scrollbar relative z-10 w-full cursor-crosshair"
-           onPointerDown={handlePointerDown}
-        >
-           <div className="relative z-10 cursor-auto min-h-full">
-               
-               {/* 検 UPGRADE: Masonry Skeleton Loaders */}
-               {isLoading && page === 1 ? (
-                  <div className={nav.viewMode === "list" ? "flex flex-col gap-4 w-full pointer-events-none" : "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start w-full pointer-events-none"}>
-                     {[150, 250, 300, 200, 280, 180, 320, 220, 260, 190, 310, 170, 290, 210, 240].slice(0, nav.viewMode === 'list' ? 8 : 15).map((height, i) => (
-                        <motion.div 
-                           key={i}
-                           initial={{ opacity: 0, y: 10 }}
-                           animate={{ opacity: 1, y: 0 }}
-                           transition={{ delay: i * 0.02 }}
-                           className={`w-full rounded-3xl relative overflow-hidden border ${isDark ? 'bg-white/5 border-white/5' : 'bg-black/5 border-black/5'}`}
-                           style={{ height: nav.viewMode === 'list' ? '72px' : `${height}px` }}
-                        >
-                           <div className={`absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-linear-to-r from-transparent ${isDark ? "via-white/10" : "via-black/5"} to-transparent`} />
-                        </motion.div>
-                     ))}
-                  </div>
-
-               ) : filteredData.length === 0 && nav.viewMode !== "calendar" ? (
-                  
-                  <div className="flex-1 w-full flex flex-col items-center mt-20 text-center px-4 relative z-10">
-                     {/* 検 UPGRADE: Contextual Empty States (Actionable Dropzone) */}
-                     <div 
-                       className={`w-full max-w-2xl border-2 border-dashed p-16 flex flex-col items-center justify-center transition-all shadow-sm rounded-3xl cursor-pointer group ${isDark ? "border-white/10 bg-white/[0.02] hover:bg-white/[0.04] hover:border-teal-500/50" : "border-black/10 bg-black/[0.02] hover:bg-black/[0.04] hover:border-teal-500/50"}`}
-                       onClick={() => fileInputRef.current?.click()}
-                       onDragOver={handleDragOver}
-                       onDragLeave={handleDragLeave}
-                       onDrop={handleDrop}
-                     >
-                        <div className={`p-6 rounded-full mb-6 transition-transform duration-500 ease-out group-hover:-translate-y-2 group-hover:scale-110 group-hover:rotate-6 ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
-                           <EmptyIcon size={56} strokeWidth={1} className={`text-teal-500`} />
+                    <form onSubmit={(e) => {
+                        e.preventDefault();
+                        if (teamPasscode.trim().toUpperCase() === "BB@2026") {
+                            setIsTeamUnlocked(true);
+                            localStorage.setItem("bb-team-unlocked", "true");
+                            setPasscodeError(false);
+                            showToast("Workspace unlocked!");
+                        } else {
+                            setPasscodeError(true);
+                        }
+                    }}>
+                        <input
+                            type="password"
+                            autoFocus
+                            value={teamPasscode}
+                            onChange={e => { setTeamPasscode(e.target.value); setPasscodeError(false); }}
+                            className={`w-full p-4 mb-2 rounded-xl border text-center font-mono text-lg tracking-widest outline-none transition-all ${passcodeError ? "border-red-500 focus:border-red-500" : (isDark ? "bg-black/20 border-white/10 focus:border-teal-500/50 text-white" : "bg-stone-50 border-stone-200 focus:border-teal-500 text-black")}`}
+                            placeholder="••••••••"
+                        />
+                        <div className="h-6 mb-4">
+                            {passcodeError && <span className="text-xs font-bold text-red-500 uppercase tracking-wider">Incorrect passcode</span>}
                         </div>
-                        <h3 className="text-3xl font-black tracking-tight mb-3 drop-shadow-sm">{emptyState.title}</h3>
-                        <p className={`text-sm font-medium mb-10 text-center max-w-sm leading-relaxed ${theme.textMuted}`}>{emptyState.desc} Or drop files here.</p>
-                        
-                        <div className="flex flex-col sm:flex-row items-center gap-4" onClick={(e) => e.stopPropagation()}>
-                           <button onClick={() => fileInputRef.current?.click()} className={`px-8 py-3.5 text-sm font-bold rounded-2xl transition-all shadow-[0_2px_8px_rgba(20,184,166,0.25)] active:scale-95 ${theme.btnPrimary}`}>
-                               Upload Media
-                           </button>
-                           <button onClick={handleNewNote} className={`px-8 py-3.5 text-sm font-bold rounded-2xl transition-colors border active:scale-95 shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${isDark ? 'bg-[#18181B] border-white/10 hover:bg-white/10 text-white' : 'bg-white border-stone-200 hover:bg-stone-50 text-black'}`}>
-                               Write a Note
-                           </button>
+                        <button type="submit" className={`w-full py-4 text-sm font-bold rounded-xl transition-all shadow-lg active:scale-95 ${theme.btnPrimary}`}>
+                            Unlock Workspace
+                        </button>
+                    </form>
+                </motion.div>
+            </div>
+        ) : (
+            <>
+                <div className="px-6 md:px-12 pb-4 pt-4 flex flex-col relative z-30 bg-transparent shrink-0">
+                   <div className="flex items-end justify-between">
+                     {nav.viewMode === "grid" || nav.viewMode === "card" || nav.viewMode === "list" ? (
+                        <>
+                         <div>
+                           <h2 className="text-4xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">
+                             {getCategoryTitle()}
+                           </h2>
+                           <p className={`mt-2 text-xs font-bold flex items-center gap-2 uppercase tracking-widest opacity-80 ${theme.textMuted}`}>
+                              {filteredData.length} {filteredData.length === 1 ? 'item' : 'items'} curated
+                           </p>
+                         </div>
+                        </>
+                     ) : (
+                        <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-6">
+                          <h2 className="text-3xl md:text-5xl font-black tracking-tighter leading-tight drop-shadow-sm">{format(nav.currentDate, "MMMM yyyy")}</h2>
+                          <div className={`flex items-center gap-1 border p-1 shadow-[0_2px_8px_rgba(0,0,0,0.04)] backdrop-blur-md rounded-2xl ${isDark ? "bg-zinc-900/50 border-zinc-800/80" : "bg-white border-stone-200"}`}>
+                             <button aria-label="Previous Month" onClick={() => updateNav({ currentDate: subMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-xl ${isDark ? "hover:bg-zinc-800 text-zinc-100" : "hover:bg-stone-100 text-stone-900"}`}>
+                                 <ChevronLeft size={18} strokeWidth={1.5}/>
+                             </button>
+                             <button onClick={() => updateNav({ currentDate: new Date() })} className={`px-5 py-2 text-sm font-bold transition-colors active:scale-95 rounded-xl ${isDark ? "hover:bg-zinc-800 text-zinc-400" : "hover:bg-stone-100 text-stone-500"}`}>
+                                 Today
+                             </button>
+                             <button aria-label="Next Month" onClick={() => updateNav({ currentDate: addMonths(nav.currentDate, 1) })} className={`p-2.5 transition-colors active:scale-95 rounded-xl ${isDark ? "hover:bg-zinc-800 text-zinc-100" : "hover:bg-stone-100 text-stone-900"}`}>
+                                 <ChevronRightIcon size={18} strokeWidth={1.5}/>
+                             </button>
+                          </div>
                         </div>
-                        
-                        <p className={`mt-10 text-[10px] font-bold uppercase tracking-widest opacity-40 ${theme.textMuted}`}>Press Cmd+K for global commands</p>
-                     </div>
-                  </div>
-                  
-               ) : nav.viewMode !== "calendar" ? (
-                  <AnimatePresence mode="wait">
-                    <motion.div 
-                        key={nav.viewMode}
-                        initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -10, scale: 0.98 }}
-                        transition={{ duration: 0.25, ease: "easeOut" }}
-                        className={`pointer-events-auto pb-10 w-full ${
-                            nav.viewMode === "list" ? "flex flex-col gap-4" : 
-                            nav.viewMode === "grid" ? "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start" : 
-                            "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"
-                        }`}
-                    >
-                          {/* 検 UPGRADE: Time-Based Grouping & Card Physics */}
-                          {Object.entries(groupedData).map(([groupName, items]) => (
-                              <React.Fragment key={groupName}>
-                                  {groupName !== "All Items" && (
-                                      <motion.div layout={false} className="col-span-full w-full pt-6 pb-2">
-                                          <h4 className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{groupName}</h4>
-                                      </motion.div>
-                                  )}
-                                  {items.map((item, index) => (
-                                      <motion.div 
-                                          key={item.clientKey || item.id} 
-                                          layout={false} 
-                                          initial={{ opacity: 0, y: 20 }}
-                                          animate={{ opacity: 1, y: 0 }}
-                                          whileHover={{ scale: 1.015, y: -4, transition: { duration: 0.2, ease: "easeOut" } }}
-                                          className={`lasso-selectable relative z-0 hover:z-50 ${nav.viewMode === 'grid' ? 'w-full' : 'h-full w-full'}`}
-                                          data-id={item.id}
-                                          transition={{ duration: 0.3, ease: "easeOut", delay: Math.min(index * 0.02, 0.1) }}
-                                      >
-                                          <MemoizedMasonryCard 
-                                              customFolders={customFolders} 
-                                              customLists={customLists} 
-                                              onMoveToFolder={moveItemToFolder} 
-                                              onMoveToList={moveItemToList} 
-                                              onUpdateTags={updateItemTags} 
-                                              onTagClick={(tag: string) => updateNav({ categoryType: "tag", category: tag, viewMode: "grid" })} 
-                                              viewMode={nav.viewMode} 
-                                              item={item} 
-                                              theme={theme} 
-                                              isDark={isDark} 
-                                              inTrash={nav.categoryType === "trash"} 
-                                              activeWorkspace={nav.workspace} 
-                                              currentUserId={session?.user?.id} 
-                                              teamRole={teamRole} 
-                                              teamMembers={teamMembers} 
-                                              onRestore={restoreFromTrash} 
-                                              onHardDelete={hardDelete} 
-                                              onDelete={moveToTrash} 
-                                              onUpdateSticky={updateStickyNote} 
-                                              toggleItemReaction={toggleItemReaction} 
-                                              toggleChecklistItem={toggleChecklistItem} 
-                                              isSelected={selectedItems.has(item.id)} 
-                                              selectedItems={Array.from(selectedItems)}
-                                              onToggleSelect={handleToggleSelect} 
-                                              isSelectMode={isSelectMode} 
-                                              isActiveKeyboard={activeIndex === index} 
-                                              onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
-                                              onClick={(e: any) => handleOpenItem(item)} 
-                                              currentCategoryType={nav.categoryType}
-                                              currentCategory={nav.category}
-                                              onRemoveFromContext={handleRemoveFromContext}
-                                              onTogglePin={handleTogglePin} 
-                                          />
-                                      </motion.div>
-                                  ))}
-                              </React.Fragment>
-                          ))}
-                    </motion.div>
-                  </AnimatePresence>
-
-               ) : (
-                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15, ease: "easeOut" }} className={`w-full overflow-hidden flex flex-col shadow-2xl border mb-10 rounded-3xl ${isDark ? "bg-[#0E0E12] border-white/5" : "bg-white border-black/5"} pointer-events-auto`}>
-                    <div className={`grid grid-cols-7 border-b shrink-0 ${isDark ? "border-white/5 bg-white/5" : "border-black/5 bg-black/5"}`}>
-                       {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-                          <div key={day} className={`p-3 md:p-5 text-center text-[10px] md:text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{day.slice(0, 3)}</div>
-                       ))}
-                    </div>
-                    <div className={`grid grid-cols-7 auto-rows-fr gap-px ${isDark ? "bg-white/5" : "bg-black/5"}`}>
-                       {calendarDays.map((day, idx) => {
-                          const dayItems = filteredData.filter(item => {
-                              const targetDate = item.scheduled_for ? new Date(item.scheduled_for) : new Date(item.created_at || new Date());
-                              return isSameDay(targetDate, day);
-                          });
-                          const isCurrentMonth = isSameMonth(day, monthStart);
-                          const isToday = isSameDay(day, new Date());
-
-                          return (
-                            <div key={day.toString()} className={`h-32 md:h-48 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? "bg-[#0A0A0C]" : "bg-white") : (isDark ? "bg-[#0A0A0C]/50 opacity-40" : "bg-[#faf8f5] opacity-50")}`}>
-                               <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 h-10 flex items-center justify-center shrink-0 rounded-full ${isToday ? "bg-teal-500 text-white shadow-lg shadow-teal-900/20" : theme.textMuted}`}>{format(day, "d")}</div>
-                               <div className="flex-1 flex flex-col gap-1 md:gap-2 overflow-y-auto custom-scrollbar pr-1">
-                                  {dayItems.map(item => {
-                                     let isYouTube = false;
-                                     if (item.url && (item.url.includes("youtube.com") || item.url.includes("youtu.be"))) {
-                                         isYouTube = true;
-                                     }
-
-                                     const isVideo = item.url && (item.url.includes("instagram.com") || isYouTube);
-                                     const chipColor = isVideo 
-                                        ? (isDark ? "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20" : "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200") 
-                                        : item.type === "note" 
-                                        ? (isDark ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-emerald-100 text-emerald-700 border-emerald-200")
-                                        : (isDark ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-100 text-blue-700 border-blue-200");
-                                     const Icon = isVideo ? Play : item.type === "note" ? FileText : Globe;
-                                     
-                                     return (
-                                        <button 
-                                           key={item.id} 
-                                           onClick={() => handleOpenItem(item)}
-                                           className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 text-[10px] md:text-xs font-bold border cursor-pointer shadow-sm truncate hover:scale-105 active:scale-95 transition-all rounded-xl ${chipColor}`}
-                                        >
-                                           <Icon size={12} strokeWidth={2} className="shrink-0 md:w-3.5 md:h-3.5" />
-                                           <span className="truncate">{item.title || "Untitled"}</span>
-                                        </button>
-                                     )
-                                  })}
-                               </div>
-                            </div>
-                          )
-                       })}
-                    </div>
-                 </motion.div>
-               )}
-
-               {hasMore && !debouncedSearchQuery && !isSelectMode && (
-                   <div ref={loadMoreRef} className="w-full flex justify-center mt-12 mb-10 pointer-events-auto h-10">
-                      {isLoading && <Loader2 size={24} className={`animate-spin ${theme.textMuted}`} />}
+                     )}
                    </div>
-               )}
-           </div>
-         </div>
+
+                   <AnimatePresence>
+                      {((nav.categoryType as any) === "hashtags" || nav.categoryType === "tag") && (
+                         <motion.div 
+                            initial={{ opacity: 0, height: 0 }} 
+                            animate={{ opacity: 1, height: "auto" }} 
+                            exit={{ opacity: 0, height: 0 }}
+                            className={`flex flex-col gap-4 mt-6 pt-4 border-t w-full relative z-30 ${isDark ? "border-white/5" : "border-black/5"}`}
+                         >
+                            <div className={`relative flex items-center w-full max-w-md overflow-hidden border focus-within:border-teal-500 transition-colors shadow-[0_2px_8px_rgba(0,0,0,0.04)] rounded-2xl ${isDark ? "bg-[#18181B] border-white/5" : "bg-white border-stone-200"}`}>
+                               <Search size={16} className={`absolute left-4 ${theme.textMuted}`} />
+                               <input type="text" placeholder="Search tags..." value={tagSearchQuery} onChange={e => setTagSearchQuery(e.target.value)} className={`w-full bg-transparent border-none py-3 pl-11 pr-4 text-sm font-medium outline-none ${theme.text}`} />
+                            </div>
+                            
+                            <div className="w-full flex flex-wrap gap-2 pt-1 pb-2">
+                               <button onClick={() => updateNav({ categoryType: "hashtags" as any, category: "All" })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-2xl ${(nav.categoryType as any) === "hashtags" ? "bg-teal-500 text-white border-teal-600 shadow-md" : (isDark ? "bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10" : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50")}`}>
+                                   All Hashtags
+                               </button>
+                               {smartTags.filter((t: string) => t.toLowerCase().includes(tagSearchQuery.toLowerCase())).map((tag: string) => (
+                                  <button key={tag} onClick={() => updateNav({ categoryType: "tag", category: tag })} className={`px-4 py-2 text-xs font-bold transition-all border shrink-0 rounded-2xl ${nav.categoryType === "tag" && nav.category === tag ? "bg-teal-500 text-white border-teal-600 shadow-md" : (isDark ? "bg-white/5 text-zinc-300 border-white/5 hover:bg-white/10" : "bg-white text-stone-700 border-stone-200 hover:bg-stone-50")}`}>
+                                      #{tag}
+                                  </button>
+                               ))}
+                            </div>
+                         </motion.div>
+                      )}
+                   </AnimatePresence>
+                </div>
+
+                <div 
+                   className="flex-1 overflow-y-auto px-6 md:px-12 pt-6 pb-24 md:pb-20 custom-scrollbar relative z-10 w-full cursor-crosshair"
+                   onPointerDown={handlePointerDown}
+                >
+                   <div className="relative z-10 cursor-auto min-h-full">
+                       
+                       {isLoading && page === 1 ? (
+                          <div className={nav.viewMode === "list" ? "flex flex-col gap-4 w-full pointer-events-none" : "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start w-full pointer-events-none"}>
+                             {[150, 250, 300, 200, 280, 180, 320, 220, 260, 190, 310, 170, 290, 210, 240].slice(0, nav.viewMode === 'list' ? 8 : 15).map((height, i) => (
+                                <motion.div 
+                                   key={i}
+                                   initial={{ opacity: 0, y: 10 }}
+                                   animate={{ opacity: 1, y: 0 }}
+                                   transition={{ delay: i * 0.02 }}
+                                   className={`w-full rounded-3xl relative overflow-hidden border ${isDark ? 'bg-white/5 border-white/5' : 'bg-black/5 border-black/5'}`}
+                                   style={{ height: nav.viewMode === 'list' ? '72px' : `${height}px` }}
+                                >
+                                   <div className={`absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-linear-to-r from-transparent ${isDark ? "via-white/10" : "via-black/5"} to-transparent`} />
+                                </motion.div>
+                             ))}
+                          </div>
+
+                       ) : filteredData.length === 0 && nav.viewMode !== "calendar" ? (
+                          
+                          <div className="flex-1 w-full flex flex-col items-center mt-20 text-center px-4 relative z-10">
+                             <div 
+                               className={`w-full max-w-2xl border-2 border-dashed p-16 flex flex-col items-center justify-center transition-all shadow-sm rounded-3xl cursor-pointer group ${isDark ? "border-white/10 bg-white/[0.02] hover:bg-white/[0.04] hover:border-teal-500/50" : "border-black/10 bg-black/[0.02] hover:bg-black/[0.04] hover:border-teal-500/50"}`}
+                               onClick={() => fileInputRef.current?.click()}
+                               onDragOver={handleDragOver}
+                               onDragLeave={handleDragLeave}
+                               onDrop={handleDrop}
+                             >
+                                <div className={`p-6 rounded-full mb-6 transition-transform duration-500 ease-out group-hover:-translate-y-2 group-hover:scale-110 group-hover:rotate-6 ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
+                                   <EmptyIcon size={56} strokeWidth={1} className={`text-teal-500`} />
+                                </div>
+                                <h3 className="text-3xl font-black tracking-tight mb-3 drop-shadow-sm">{emptyState.title}</h3>
+                                <p className={`text-sm font-medium mb-10 text-center max-w-sm leading-relaxed ${theme.textMuted}`}>{emptyState.desc} Or drop files here.</p>
+                                
+                                <div className="flex flex-col sm:flex-row items-center gap-4" onClick={(e) => e.stopPropagation()}>
+                                   <button onClick={() => fileInputRef.current?.click()} className={`px-8 py-3.5 text-sm font-bold rounded-2xl transition-all shadow-[0_2px_8px_rgba(20,184,166,0.25)] active:scale-95 ${theme.btnPrimary}`}>
+                                       Upload Media
+                                   </button>
+                                   <button onClick={handleNewNote} className={`px-8 py-3.5 text-sm font-bold rounded-2xl transition-colors border active:scale-95 shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${isDark ? 'bg-[#18181B] border-white/10 hover:bg-white/10 text-white' : 'bg-white border-stone-200 hover:bg-stone-50 text-black'}`}>
+                                       Write a Note
+                                   </button>
+                                </div>
+                                
+                                <p className={`mt-10 text-[10px] font-bold uppercase tracking-widest opacity-40 ${theme.textMuted}`}>Press Cmd+K for global commands</p>
+                             </div>
+                          </div>
+                          
+                       ) : nav.viewMode !== "calendar" ? (
+                          <AnimatePresence mode="wait">
+                            <motion.div 
+                                key={nav.viewMode}
+                                initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                                transition={{ duration: 0.25, ease: "easeOut" }}
+                                className={`pointer-events-auto pb-10 w-full ${
+                                    nav.viewMode === "list" ? "flex flex-col gap-4" : 
+                                    nav.viewMode === "grid" ? "grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 items-start" : 
+                                    "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"
+                                }`}
+                            >
+                                  {Object.entries(groupedData).map(([groupName, items]) => (
+                                      <React.Fragment key={groupName}>
+                                          {groupName !== "All Items" && (
+                                              <motion.div layout={false} className="col-span-full w-full pt-6 pb-2">
+                                                  <h4 className={`text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{groupName}</h4>
+                                              </motion.div>
+                                          )}
+                                          {items.map((item, index) => (
+                                              <motion.div 
+                                                  key={item.clientKey || item.id} 
+                                                  layout={false} 
+                                                  initial={{ opacity: 0, y: 20 }}
+                                                  animate={{ opacity: 1, y: 0 }}
+                                                  whileHover={{ scale: 1.015, y: -4, transition: { duration: 0.2, ease: "easeOut" } }}
+                                                  className={`lasso-selectable relative z-0 hover:z-50 ${nav.viewMode === 'grid' ? 'w-full' : 'h-full w-full'}`}
+                                                  data-id={item.id}
+                                                  transition={{ duration: 0.3, ease: "easeOut", delay: Math.min(index * 0.02, 0.1) }}
+                                              >
+                                                  <MemoizedMasonryCard 
+                                                      customFolders={activeFolders} 
+                                                      customLists={activeLists} 
+                                                      onMoveToFolder={moveItemToFolder} 
+                                                      onMoveToList={moveItemToList} 
+                                                      onUpdateTags={updateItemTags} 
+                                                      onTagClick={(tag: string) => updateNav({ categoryType: "tag", category: tag, viewMode: "grid" })} 
+                                                      viewMode={nav.viewMode} 
+                                                      item={item} 
+                                                      theme={theme} 
+                                                      isDark={isDark} 
+                                                      inTrash={nav.categoryType === "trash"} 
+                                                      activeWorkspace={nav.workspace} 
+                                                      currentUserId={session?.user?.id} 
+                                                      teamRole={teamRole} 
+                                                      teamMembers={teamMembers} 
+                                                      onRestore={restoreFromTrash} 
+                                                      onHardDelete={hardDelete} 
+                                                      onDelete={moveToTrash} 
+                                                      onUpdateSticky={updateStickyNote} 
+                                                      toggleItemReaction={toggleItemReaction} 
+                                                      toggleChecklistItem={toggleChecklistItem} 
+                                                      isSelected={selectedItems.has(item.id)} 
+                                                      selectedItems={Array.from(selectedItems)}
+                                                      onToggleSelect={handleToggleSelect} 
+                                                      isSelectMode={isSelectMode} 
+                                                      isActiveKeyboard={activeIndex === index} 
+                                                      onPlayYouTube={(id: string) => setPlayingYouTubeId(id)} 
+                                                      onClick={(e: any) => handleOpenItem(item)} 
+                                                      currentCategoryType={nav.categoryType}
+                                                      currentCategory={nav.category}
+                                                      onRemoveFromContext={handleRemoveFromContext}
+                                                      onTogglePin={handleTogglePin} 
+                                                  />
+                                              </motion.div>
+                                          ))}
+                                      </React.Fragment>
+                                  ))}
+                            </motion.div>
+                          </AnimatePresence>
+
+                       ) : (
+                         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15, ease: "easeOut" }} className={`w-full overflow-hidden flex flex-col shadow-2xl border mb-10 rounded-3xl ${isDark ? "bg-[#0E0E12] border-white/5" : "bg-white border-black/5"} pointer-events-auto`}>
+                            <div className={`grid grid-cols-7 border-b shrink-0 ${isDark ? "border-white/5 bg-white/5" : "border-black/5 bg-black/5"}`}>
+                               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+                                  <div key={day} className={`p-3 md:p-5 text-center text-[10px] md:text-xs font-bold uppercase tracking-widest ${theme.textMuted}`}>{day.slice(0, 3)}</div>
+                               ))}
+                            </div>
+                            <div className={`grid grid-cols-7 auto-rows-fr gap-px ${isDark ? "bg-white/5" : "bg-black/5"}`}>
+                               {calendarDays.map((day, idx) => {
+                                  const dayItems = filteredData.filter(item => {
+                                      const targetDate = item.scheduled_for ? new Date(item.scheduled_for) : new Date(item.created_at || new Date());
+                                      return isSameDay(targetDate, day);
+                                  });
+                                  const isCurrentMonth = isSameMonth(day, monthStart);
+                                  const isToday = isSameDay(day, new Date());
+
+                                  return (
+                                    <div key={day.toString()} className={`h-32 md:h-48 p-2 md:p-4 flex flex-col gap-2 md:gap-3 transition-colors ${isCurrentMonth ? (isDark ? "bg-[#0A0A0C]" : "bg-white") : (isDark ? "bg-[#0A0A0C]/50 opacity-40" : "bg-[#faf8f5] opacity-50")}`}>
+                                       <div className={`text-xs md:text-sm font-black w-6 h-6 md:w-10 h-10 flex items-center justify-center shrink-0 rounded-full ${isToday ? "bg-teal-500 text-white shadow-lg shadow-teal-900/20" : theme.textMuted}`}>{format(day, "d")}</div>
+                                       <div className="flex-1 flex flex-col gap-1 md:gap-2 overflow-y-auto custom-scrollbar pr-1">
+                                          {dayItems.map(item => {
+                                             let isYouTube = false;
+                                             if (item.url && (item.url.includes("youtube.com") || item.url.includes("youtu.be"))) {
+                                                 isYouTube = true;
+                                             }
+
+                                             const isVideo = item.url && (item.url.includes("instagram.com") || isYouTube);
+                                             const chipColor = isVideo 
+                                                ? (isDark ? "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20" : "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200") 
+                                                : item.type === "note" 
+                                                ? (isDark ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-emerald-100 text-emerald-700 border-emerald-200")
+                                                : (isDark ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-blue-100 text-blue-700 border-blue-200");
+                                             const Icon = isVideo ? Play : item.type === "note" ? FileText : Globe;
+                                             
+                                             return (
+                                                <button 
+                                                   key={item.id} 
+                                                   onClick={() => handleOpenItem(item)}
+                                                   className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 text-[10px] md:text-xs font-bold border cursor-pointer shadow-sm truncate hover:scale-105 active:scale-95 transition-all rounded-xl ${chipColor}`}
+                                                >
+                                                   <Icon size={12} strokeWidth={2} className="shrink-0 md:w-3.5 md:h-3.5" />
+                                                   <span className="truncate">{item.title || "Untitled"}</span>
+                                                </button>
+                                             )
+                                          })}
+                                       </div>
+                                    </div>
+                                  )
+                               })}
+                            </div>
+                         </motion.div>
+                       )}
+
+                       {hasMore && !debouncedSearchQuery && !isSelectMode && (
+                           <div ref={loadMoreRef} className="w-full flex justify-center mt-12 mb-10 pointer-events-auto h-10">
+                              {isLoading && <Loader2 size={24} className={`animate-spin ${theme.textMuted}`} />}
+                           </div>
+                       )}
+                   </div>
+                </div>
+            </>
+        )}
       </main>
       
       <TeamChatDrawer 
-          isChatOpen={ui.isChatOpen} 
+          isChatOpen={ui.isChatOpen && isTeamUnlocked} 
           closeChat={() => updateUi({ isChatOpen: false })} 
           navWorkspace={nav.workspace} 
           isDark={isDark} 

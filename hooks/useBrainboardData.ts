@@ -13,24 +13,27 @@ export function useBrainboardData(
   updateUi: Function
 ) {
   const [items, setItems] = useState<BentoItem[]>([]);
-  const [customFolders, setCustomFolders] = useState<string[]>([]);
-  const [customLists, setCustomLists] = useState<string[]>([]);
+  
+  // Separated Folders and Lists for Workspaces
+  const [personalFolders, setPersonalFolders] = useState<string[]>([]);
+  const [teamFolders, setTeamFolders] = useState<string[]>([]);
+  const [personalLists, setPersonalLists] = useState<string[]>([]);
+  const [teamLists, setTeamLists] = useState<string[]>([]);
+  
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   
-  // BULLETPROOF SORTING: Tracks recently added items to manually lock them to the top of the grid
   const [recentIds, setRecentIds] = useState<(string | number)[]>([]);
 
   const fetchItems = useCallback(async (pageNum = 1, isLoadMore = false) => {
     if (!session?.user?.id) return;
     
-    // CRITICAL FIX: Always enforce loading lock to prevent infinite IntersectionObserver loops
     setIsLoading(true); 
     updateUi({ isSyncing: true });
     
     try {
-      const PAGE_SIZE = 10000; // Load all at once
+      const PAGE_SIZE = 10000;
       const from = (pageNum - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
@@ -44,34 +47,50 @@ export function useBrainboardData(
       if (error) {
         console.error("Supabase Sync Error:", error);
         showToast("Failed to sync items.", true);
-        setHasMore(false); // Stops the infinite loading loop
+        setHasMore(false);
       } else if (data) {
-        if (isLoadMore) {
-           setItems(prev => {
+        
+        // Use functional state update to break the dependency loop
+        setItems(prev => {
+           let nextItems;
+           if (isLoadMore) {
               const newItems = (data as BentoItem[]).filter(d => !prev.some(p => String(p.id) === String(d.id)));
-              return [...prev, ...newItems];
-           });
-        } else {
-           setItems(data as BentoItem[]);
-           setPage(1);
-        }
-        
-        setHasMore(data.length === PAGE_SIZE);
+              nextItems = [...prev, ...newItems];
+           } else {
+              nextItems = data as BentoItem[];
+           }
 
-        const allSections = (data as BentoItem[]).flatMap(item => item.sections || (item.section ? [item.section] : []));
-        const folders = Array.from(new Set(allSections)).filter(Boolean) as string[];
-        const lists = Array.from(new Set((data as BentoItem[]).map(i => i.list_name).filter(Boolean))) as string[];
-        
-        setCustomFolders(prev => Array.from(new Set([...prev, ...folders.filter(f => !["Inbox", "Archive"].includes(f))])));
-        setCustomLists(prev => Array.from(new Set([...prev, ...lists])));
+           // Extract folders and lists natively from the new calculated state
+           const pItems = nextItems.filter(d => !d.workspace_id);
+           const tItems = nextItems.filter(d => d.workspace_id);
+
+           const getFolders = (itemArr: BentoItem[]) => Array.from(new Set(itemArr.flatMap(i => i.sections || (i.section ? [i.section] : [])))).filter(Boolean) as string[];
+           const getLists = (itemArr: BentoItem[]) => Array.from(new Set(itemArr.map(i => i.list_name).filter(Boolean))) as string[];
+
+           const pFolders = getFolders(pItems);
+           const tFolders = getFolders(tItems);
+           const pLists = getLists(pItems);
+           const tLists = getLists(tItems);
+           
+           setPersonalFolders(pf => Array.from(new Set([...pf, ...pFolders.filter(f => !["Inbox", "Archive"].includes(f))])));
+           setTeamFolders(tf => Array.from(new Set([...tf, ...tFolders.filter(f => !["Inbox", "Archive"].includes(f))])));
+           setPersonalLists(pl => Array.from(new Set([...pl, ...pLists])));
+           setTeamLists(tl => Array.from(new Set([...tl, ...tLists])));
+
+           return nextItems;
+        });
+
+        if (!isLoadMore) setPage(1);
+        setHasMore(data.length === PAGE_SIZE);
       }
     } catch (err) {
       console.error("Unexpected fetch error:", err);
-      setHasMore(false); // Stops the infinite loading loop on catch as well
+      setHasMore(false);
     } finally {
       setIsLoading(false);
       updateUi({ isSyncing: false });
     }
+    // We removed 'items' from the dependency array below to prevent infinite rendering!
   }, [session?.user?.id, teamWorkspaceId, showToast, updateUi]);
 
   const saveNote = async (noteToSave: BentoItem) => {
@@ -104,7 +123,7 @@ export function useBrainboardData(
                showToast("Database Error: Failed to save note.", true);
             }
             if (data) {
-                setRecentIds(prev => [data.id, ...prev]); // Lock to Top
+                setRecentIds(prev => [data.id, ...prev]);
                 setItems(prev => [data, ...prev.filter(i => String(i.id) !== String(noteToSave.id))]);
                 showToast("Saved successfully!");
             }
@@ -123,10 +142,17 @@ export function useBrainboardData(
 
         if (newSections.length > 0) {
            const mappedFolders = newSections.filter((f: string) => !["Inbox", "Archive"].includes(f));
-           if (mappedFolders.length > 0) setCustomFolders(prev => [...new Set([...prev, ...mappedFolders])]);
+           if (mappedFolders.length > 0) {
+               if (payload.workspace_id) setTeamFolders(prev => [...new Set([...prev, ...mappedFolders])]);
+               else setPersonalFolders(prev => [...new Set([...prev, ...mappedFolders])]);
+           }
         }
-        if (payload.list_name && !customLists.includes(payload.list_name)) {
-           setCustomLists(prev => [...new Set([...prev, payload.list_name as string])]);
+        if (payload.list_name) {
+           if (payload.workspace_id && !teamLists.includes(payload.list_name)) {
+               setTeamLists(prev => [...new Set([...prev, payload.list_name as string])]);
+           } else if (!payload.workspace_id && !personalLists.includes(payload.list_name)) {
+               setPersonalLists(prev => [...new Set([...prev, payload.list_name as string])]);
+           }
         }
     } catch (e) {
         console.error("Save Note Catch Error:", e);
@@ -143,7 +169,7 @@ export function useBrainboardData(
          showToast(`Database Error: ${error.message}`, true);
       }
       if (data) {
-          setRecentIds(prev => [data.id, ...prev]); // Lock to Top
+          setRecentIds(prev => [data.id, ...prev]); 
           setItems(prev => [data, ...prev]);
       }
       return data;
@@ -471,7 +497,11 @@ export function useBrainboardData(
   };
 
   return {
-    items, setItems, customFolders, setCustomFolders, customLists, setCustomLists,
+    items, setItems, 
+    personalFolders, setPersonalFolders, 
+    teamFolders, setTeamFolders, 
+    personalLists, setPersonalLists, 
+    teamLists, setTeamLists,
     isLoading, page, setPage, hasMore, fetchItems, saveNote, insertItem, updateItemTags, moveItemToFolder, moveItemToList, updateStickyNote, toggleItemReaction, toggleChecklistItem,
     moveToTrash, restoreFromTrash, hardDelete, emptyTrash, renameFolder, deleteFolder, renameList, deleteList,
     bulkMoveToFolder, bulkMoveToList, bulkMoveToTrash, bulkRestoreFromTrash, bulkHardDelete,
