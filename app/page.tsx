@@ -46,7 +46,80 @@ const inter = Inter({ subsets: ['latin'] });
 
 const NOISE_BG = "url('data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMjAwIDIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZmlsdGVyIGlkPSJub2lzZUZpbHRlciI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9IjAuOCIgbnVtT2N0YXZlcz0iNCIgc3RpdGNoVGlsZXM9InN0aXRjaCIvPjwvZmlsdGVyPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbHRlcj0idXJsKCNub2lzZUZpbHRlcikiLz48L3N2Zz4=')";
 
+// ============================================================================
+// TEMPORARY "UNDER DEVELOPMENT" SCREEN
+// This is currently the default export. It will be shown to all visitors.
+// To restore your app, simply change this function name to something else,
+// and change "BrainboardApp_Backup" (at the bottom) to "export default function BrainboardBalanced"
+// ============================================================================
 export default function BrainboardBalanced() {
+  return (
+    <div className={`relative min-h-screen w-full bg-[#050505] text-white overflow-hidden selection:bg-teal-500/30 flex flex-col items-center justify-center ${inter.className}`}>
+      
+      {/* Abstract Background Glows */}
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-teal-600/20 blur-[120px] pointer-events-none mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-emerald-600/20 blur-[120px] pointer-events-none mix-blend-screen animate-pulse" style={{ animationDuration: '6s', animationDelay: '1s' }} />
+      
+      {/* Grid Pattern */}
+      <div 
+         className="absolute inset-0 opacity-[0.03] pointer-events-none" 
+         style={{ 
+             backgroundImage: "linear-gradient(to right, #ffffff 1px, transparent 1px), linear-gradient(to bottom, #ffffff 1px, transparent 1px)", 
+             backgroundSize: "40px 40px",
+             WebkitMaskImage: "radial-gradient(circle at center, black, transparent 80%)",
+             maskImage: "radial-gradient(circle at center, black, transparent 80%)"
+         }} 
+      />
+
+      <div className="relative z-10 flex flex-col items-center text-center px-6 w-full max-w-4xl mx-auto">
+        <motion.div 
+           initial={{ scale: 0.8, opacity: 0 }} 
+           animate={{ scale: 1, opacity: 1 }} 
+           transition={{ duration: 0.5, ease: "easeOut" }}
+           className="w-20 h-20 mb-8 rounded-3xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center shadow-[0_0_40px_rgba(20,184,166,0.2)]"
+        >
+           <Sparkles size={36} className="text-teal-400" />
+        </motion.div>
+        
+        <motion.div
+           initial={{ y: 20, opacity: 0 }} 
+           animate={{ y: 0, opacity: 1 }} 
+           transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
+           className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-bold text-zinc-300 tracking-wide mb-6 shadow-xl"
+        >
+           <Settings size={14} className="animate-spin text-teal-500" style={{ animationDuration: '3s' }} /> Project Under Development
+        </motion.div>
+
+        <motion.h1 
+           initial={{ y: 20, opacity: 0 }} 
+           animate={{ y: 0, opacity: 1 }} 
+           transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+           className="text-5xl md:text-7xl font-black tracking-tighter mb-6 leading-tight drop-shadow-2xl"
+        >
+           <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-white/60">Something great is </span>
+           <br className="hidden md:block" />
+           <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-400">being built here.</span>
+        </motion.h1>
+
+        <motion.p
+           initial={{ y: 20, opacity: 0 }} 
+           animate={{ y: 0, opacity: 1 }} 
+           transition={{ duration: 0.5, delay: 0.3, ease: "easeOut" }}
+           className="text-lg md:text-xl text-zinc-400 max-w-xl mb-12 leading-relaxed"
+        >
+           Brainboard is currently undergoing major architectural upgrades. Check back soon for the full release.
+        </motion.p>
+      </div>
+    </div>
+  );
+}
+
+
+// ============================================================================
+// BACKUP OF ORIGINAL APP
+// Renamed to "BrainboardApp_Backup" so it stays safely in your file without executing.
+// ============================================================================
+function BrainboardApp_Backup() {
   const [session, setSession] = useState<any>(null);
   const [teamWorkspaceId] = useState<string>("11111111-1111-1111-1111-111111111111"); 
 

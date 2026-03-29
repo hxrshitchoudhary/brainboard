@@ -542,11 +542,17 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
         ) : null}
 
         {itemType === "image" || itemType === "video" || itemType === "audio" || itemType === "document" ? (
-          <div className={`w-full relative font-sans flex-1 flex flex-col justify-between bg-transparent ${viewMode === 'card' ? 'h-full' : 'h-auto'}`}>
+          <div className={`w-full relative font-sans flex-1 flex flex-col justify-between bg-transparent ${viewMode === 'card' ? 'h-full' : 'h-auto'} overflow-hidden rounded-t-3xl`}>
             {itemType === "video" && !item.url ? ( 
-              <motion.video src={displayImg} muted autoPlay loop playsInline draggable={false} onLoadedData={() => setImgLoaded(true)} className={`w-full object-cover pointer-events-none rounded-t-3xl ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'} transition-all duration-500 ${imgLoaded ? 'blur-0 opacity-100' : 'blur-md opacity-50'}`} />
+              <div className="relative w-full h-full overflow-hidden">
+                <motion.video src={displayImg} muted autoPlay loop playsInline draggable={false} onLoadedData={() => setImgLoaded(true)} className={`w-full object-cover pointer-events-none rounded-t-3xl ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'} transition-transform duration-700 ease-out group-hover/card:scale-110 group-hover/card:-rotate-1 ${imgLoaded ? 'blur-0 opacity-100' : 'blur-md opacity-50'}`} />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 pointer-events-none" />
+              </div>
             ) : displayImg ? (
-              <motion.img src={displayImg} loading="lazy" decoding="async" onLoad={() => setImgLoaded(true)} draggable={false} alt={item.title || "Media"} className={`w-full object-cover group-hover/card:scale-[1.02] pointer-events-none rounded-t-3xl min-h-[150px] bg-white/5 dark:bg-black/5 ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'} transition-all duration-500 ${imgLoaded ? 'blur-0 opacity-100' : 'blur-md opacity-50'}`} />
+              <div className="relative w-full h-full overflow-hidden">
+                <motion.img src={displayImg} loading="lazy" decoding="async" onLoad={() => setImgLoaded(true)} draggable={false} alt={item.title || "Media"} className={`w-full object-cover pointer-events-none min-h-[150px] bg-white/5 dark:bg-black/5 ${viewMode === 'card' ? 'h-full rounded-b-3xl' : 'h-auto'} transition-transform duration-700 ease-out group-hover/card:scale-110 group-hover/card:-rotate-1 ${imgLoaded ? 'blur-0 opacity-100' : 'blur-md opacity-50'}`} />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 pointer-events-none" />
+              </div>
             ) : (
               <div className={`w-full flex items-center justify-center rounded-t-3xl ${itemType === 'audio' || itemType === 'document' ? 'h-24' : 'h-40'} ${isDark ? 'bg-white/5' : 'bg-black/5'}`}>
                  {itemType === 'audio' ? <Music size={32} strokeWidth={1.5} className="text-fuchsia-500 opacity-60" /> :
@@ -562,15 +568,15 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
             )}
             
             {!inTrash && !isSelectMode && (
-              <div className={`absolute inset-0 flex flex-col justify-end p-6 bg-linear-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 z-10 pointer-events-none rounded-3xl ${itemType === 'audio' ? 'pb-20' : ''}`}>
+              <div className={`absolute inset-0 flex flex-col justify-end p-6 opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 z-10 pointer-events-none rounded-3xl ${itemType === 'audio' ? 'pb-20' : ''}`}>
                  {item.title ? (
-                   <>
-                     <h3 className="text-white text-base font-black tracking-tight drop-shadow-md leading-normal truncate w-[85%] [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">{item.title}</h3>
-                     {item.content && <p className="text-white/90 text-xs truncate w-[85%] [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">{item.content}</p>}
-                   </>
+                   <div className="transform translate-y-2 group-hover/card:translate-y-0 transition-transform duration-300">
+                     <h3 className="text-white text-base font-black tracking-tight drop-shadow-lg leading-normal truncate w-[85%]">{item.title}</h3>
+                     {item.content && <p className="text-white/80 text-xs truncate w-[85%] mt-1 drop-shadow-md">{item.content}</p>}
+                   </div>
                  ) : (
                    <>
-                     <div className="self-center mb-auto mt-auto bg-white/20 p-4 rounded-full text-white shadow-2xl backdrop-blur-xl">
+                     <div className="self-center mb-auto mt-auto bg-white/20 p-4 rounded-full text-white shadow-2xl backdrop-blur-xl transform scale-90 group-hover/card:scale-100 transition-transform duration-300">
                         {itemType === 'audio' ? <Music size={20} strokeWidth={1.5} className="ml-0.5" /> : itemType === 'document' ? <FileIcon size={20} strokeWidth={1.5} className="ml-0.5" /> : <Play size={20} strokeWidth={1.5} className="fill-current ml-0.5" />}
                      </div>
                    </>
@@ -700,7 +706,6 @@ const MemoizedMasonryCardComponent = function MemoizedMasonryCard({ customFolder
 };
 
 export const MemoizedMasonryCard = memo(MemoizedMasonryCardComponent, (prevProps, nextProps) => {
-  // CRITICAL FIX: The component previously cached the teamRole so changing permissions didn't re-render the card
   return prevProps.isSelected === nextProps.isSelected &&
          prevProps.item === nextProps.item &&
          prevProps.viewMode === nextProps.viewMode &&
@@ -712,6 +717,6 @@ export const MemoizedMasonryCard = memo(MemoizedMasonryCardComponent, (prevProps
          prevProps.currentCategoryType === nextProps.currentCategoryType &&
          prevProps.customFolders === nextProps.customFolders &&
          prevProps.customLists === nextProps.customLists &&
-         prevProps.teamRole === nextProps.teamRole &&             // Fixed memo check
-         prevProps.activeWorkspace === nextProps.activeWorkspace; // Fixed memo check
+         prevProps.teamRole === nextProps.teamRole &&             
+         prevProps.activeWorkspace === nextProps.activeWorkspace; 
 });
